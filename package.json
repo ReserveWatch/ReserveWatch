@@ -1,0 +1,32 @@
+{
+  "name": "xrpl-health-monitor",
+  "version": "1.0.0",
+  "description": "XRPL commodity-token (gold) health monitor MVP",
+  "homepage": "https://thereservewatch.com",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "start": "tsx --env-file-if-exists=.env src/server.ts",
+    "check": "tsx src/check.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start:prod": "node --env-file-if-exists=.env dist/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.3.0",
+    "xrpl": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.9"
+  }
+}
