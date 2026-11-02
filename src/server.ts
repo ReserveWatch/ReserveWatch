@@ -9,8 +9,8 @@ import { isTransient } from './xrplClient.js';
 import { TOKENS, COMMODITY_META, commodityMeta } from './config/tokens.js';
 import { CLASS_PAGES, GROUPS, type ClassPage } from './content/commodities.js';
 import { SNAPSHOTS, type WeeklySnapshot, type SnapToken } from './content/snapshots.js';
-import { LEARN_GUIDES, type LearnGuide, type LearnCtx } from './content/learn.js';
-import { seoHead, robotsTxt, sitemapXml, orgLd, websiteLd, datasetLd, breadcrumbLd, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
+import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './content/learn.js';
+import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -589,6 +589,7 @@ function learnGuidePage(g: LearnGuide) {
       { '@context': 'https://schema.org', '@type': 'Article', headline: g.h1, description: g.description, datePublished: g.datePublished, dateModified: g.dateModified,
         mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' } },
       ...(g.extraLd?.(SITE_URL + path) ?? []),
+      ...(g.faq ? [faqPageLd(g.faq(ctx))] : []),
     ],
     body: `<div class="legal"><h1>${esc(g.h1)}</h1><p class="muted">Last updated ${esc(longDate(g.dateModified))} · <a href="/learn">All guides</a></p>
 ${g.body(ctx)}</div>` });
@@ -625,6 +626,7 @@ function clawbackPillar() {
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Learn', path: '/learn' }, { name: 'Clawback, freeze and trust lines', path }]),
       { '@context': 'https://schema.org', '@type': 'Article', headline: h1, description, datePublished: '2026-10-30', dateModified: LEGAL_UPDATED_ISO,
         mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' } },
+      faqPageLd(CLAWBACK_FAQ),
     ],
     body: `<div class="legal"><h1>${esc(h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED}</p>
 <p class="notice"><b>Short version:</b> On the XRP Ledger, a gold, silver, platinum or other commodity token is an IOU from an issuer, and you hold it through a <b>trust line</b>. The issuer's account settings decide whether it can <b>freeze</b> your tokens or <b>claw them back</b>. ReserveWatch reads those settings straight from the ledger for every token it tracks. This is education, not investment advice, and these settings say nothing about whether metal sits in a vault.</p>
@@ -780,6 +782,7 @@ app.use((q, r, next) => {
   next();
 });
 app.get('/robots.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt()); });
+app.get('/llms.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(llmsTxt()); });
 app.get('/sitemap.xml', (_q, r) => {
   const live = (snap?.updatedAt ?? new Date().toISOString()).slice(0, 10);
   r.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml(live, LEGAL_UPDATED_ISO));

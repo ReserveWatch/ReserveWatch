@@ -90,15 +90,71 @@ export const breadcrumbLd = (items: { name: string; path: string }[]) => ({
   itemListElement: items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, item: abs(it.path) })),
 });
 
-// ---------- robots.txt / sitemap.xml ----------
+/** One question the page already answers, in plain text (no HTML, no new claims). */
+export interface FaqItem { q: string; a: string }
+
+/** FAQPage JSON-LD. Pass only Q&A taken from that page's existing copy. */
+export const faqPageLd = (items: FaqItem[]) => ({
+  '@context': 'https://schema.org', '@type': 'FAQPage',
+  mainEntity: items.filter(it => it.q.trim() && it.a.trim()).map(it => ({
+    '@type': 'Question', name: it.q,
+    acceptedAnswer: { '@type': 'Answer', text: it.a },
+  })),
+});
+
+// ---------- robots.txt / sitemap.xml / llms.txt ----------
 export const robotsTxt = () => `# ${SITE_NAME} — ${SITE_URL}
+# Search and AI crawlers are allowed, including GPTBot, ClaudeBot, Google-Extended, PerplexityBot, Applebot-Extended, and CCBot.
 User-agent: *
 Allow: /
 Disallow: /api/refresh
 Disallow: /healthz
 
 Sitemap: ${SITE_URL}/sitemap.xml
+# Summary for language models: ${SITE_URL}/llms.txt
 `;
+
+/** Short, machine-readable site summary (llms.txt). Facts only; no issuer addresses. */
+export function llmsTxt(): string {
+  const learn = [
+    { href: abs('/learn/clawback-freeze-trust-lines'), title: 'Clawback, freeze and trust lines', note: 'What an issuer can and cannot do to tokens held on a trust line.' },
+    ...LEARN_GUIDES.map(g => ({ href: abs(`/learn/${g.slug}`), title: g.crumb, note: g.blurb })),
+  ];
+  return `# ${SITE_NAME}
+
+> ${TAGLINE}. ${DEFAULT_DESCRIPTION}
+
+${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity and publishes automated health labels (OK, WARN, CRITICAL). The same published rules apply to every issuer. "Unverified listing" and "Issuer link unconfirmed" are soft labels: a link could not be confirmed from the project's own sources. A label is not an allegation.
+
+## What ${SITE_NAME} is not
+
+- Not a vault audit and not proof of reserves. On-ledger supply counts tokens. It does not show that a physical commodity exists.
+- Not investment, financial, legal, or tax advice. OK, WARN, and CRITICAL are not credit ratings, recommendations, or opinions on solvency.
+- Not a custodian and not an issuer. ${SITE_NAME} does not hold funds, run wallets, or ask for seeds, private keys, or payments.
+- Not affiliated with Ripple, the XRPL Foundation, or any token issuer it lists.
+
+## Key pages
+
+- [Home](${abs('/')}): live health readings for tracked tokens.
+- [Methodology](${abs('/methodology')}): how OK, WARN, and CRITICAL are set, including peg vs spot.
+- [Learn](${abs('/learn')}): plain-language explainers.
+${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
+- [Commodities](${abs('/commodities')}): asset classes on the XRP Ledger, including classes with no public issuer tracked yet.
+- [Weekly snapshots](${abs('/snapshots')}): frozen weekly copies of the automated checks. Each week: ${abs('/snapshots')}/{YYYY-MM-DD}.
+- [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
+- [Independence](${abs('/independent')}): not a custodian, issuer, vault auditor, or investment advice.
+- [Dataset JSON API](${abs('/api/tokens')}): free JSON readings (application/json). Free to cite.
+
+## Citation
+
+The Dataset JSON API is free to cite: ${abs('/api/tokens')}
+Attribute "${SITE_NAME}" and link the API URL or the page a reading came from. Per-token JSON is ${abs('/api/tokens')}/{id}.
+Cache responses. Acceptable use: ${abs('/terms')}
+Do not describe the labels as an audit, proof of reserves, a credit rating, or investment advice. Readings can be delayed, incomplete, or wrong. Confirm with the issuer and an independent explorer.
+Limits: ${abs('/disclaimer')}
+Corrections: ${abs('/contact')}
+`;
+}
 
 /** Sitemap of key public URLs. `lastmod` = YYYY-MM-DD; live pages use the latest snapshot date. */
 export function sitemapXml(liveDate: string, legalDate: string): string {
@@ -120,6 +176,7 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/disclaimer'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/terms'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/contact'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
+    { loc: abs('/llms.txt'), lastmod: legalDate, changefreq: 'monthly', priority: '0.3' },
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
