@@ -26,6 +26,8 @@ export interface LearnGuide {
   body: (c: LearnCtx) => string;
   /** Extra JSON-LD beyond Breadcrumb + Article (e.g. DefinedTermSet). */
   extraLd?: (url: string) => object[];
+  /** FAQPage entries: questions this page already answers. Plain text; same facts as `body`. */
+  faq?: (c: LearnCtx) => { q: string; a: string }[];
 }
 
 const n0 = (n: number) => n.toLocaleString('en-US');
@@ -76,6 +78,12 @@ const PEG_VS_SPOT: LearnGuide = {
 ${c.liveTable ? `<h2>6. Live readings${c.asOf ? ` <span class="muted" style="font-size:14px;font-weight:400">(as of ${c.asOf})</span>` : ''}</h2>${c.liveTable}<p class="muted">Live values update about every five minutes on each token page and in the free <a href="/api/tokens">JSON API</a> (<code>peg</code> and <code>liquidity</code> fields).</p>` : ''}
 
 <p class="muted">Related: <a href="/methodology#peg">Methodology: peg</a> · <a href="/learn/glossary">Glossary</a> · <a href="/learn/unverified-listings">Unverified listings explained</a> · <a href="/snapshots">Ledger snapshots</a> · <a href="/learn">All guides</a> · <a href="/disclaimer">Disclaimer</a></p>`,
+  faq: c => [
+    { q: 'What is peg deviation?', a: `For gold, silver, platinum and palladium tokens, ReserveWatch compares the spot price of the metal a token says it represents with the price the token trades at on the XRP Ledger. The gap is the peg deviation: (on-ledger price − spot price per token) ÷ spot price per token, shown as a percentage. A positive number means the token traded above spot; a negative number means below. A peg reading describes trading prices only. It is not proof that metal exists in a vault, and it is not a signal to buy or sell.` },
+    { q: 'When is a peg reading graded?', a: `ReserveWatch grades the gap only when the token's AMM pools hold at least about $${n0(c.lowLiqUsd)} in total value locked. Under ${c.pegWarnPct}% is OK, ${c.pegWarnPct}% to under ${c.pegCritPct}% is WARN, and ${c.pegCritPct}% or more is CRITICAL. Pools below that gate, or no pool at all, are not measurable. If there is no pool, the middle of the best bid and ask on the DEX order book may be shown when the spread is ${c.maxSpreadPct}% or less, but an order-book price is never graded as reliable.` },
+    { q: 'Which commodities show "price vs spot not measured"?', a: 'Oil, natural gas, electricity, uranium, copper, diamonds, timber and crops have no single free, public spot price that maps cleanly onto a token. For those classes ReserveWatch shows "price vs spot not measured" instead of a guess. Every other ledger check (supply, issuer flags, liquidity, holders, domain verification) still runs.' },
+    { q: 'What does a peg reading not show?', a: 'It does not show that the metal exists, is insured, or can be redeemed. ReserveWatch does not audit vaults or custodians, and on-ledger data is not proof of reserves. It does not tell anyone to buy, sell or hold. A token near spot can still carry other risks (clawback, freeze, concentration); a token far from spot may simply have a thin pool.' },
+  ],
 };
 
 // ---------- 2. Unverified listings / issuer link unconfirmed ----------
@@ -127,6 +135,12 @@ const UNVERIFIED: LearnGuide = {
 ${c.liveTable ? `<h2>Tokens currently carrying a label${c.asOf ? ` <span class="muted" style="font-size:14px;font-weight:400">(as of ${c.asOf})</span>` : ''}</h2>${c.liveTable}<p class="muted">Shown for transparency only — not an endorsement, and not an allegation of wrongdoing.</p>` : ''}
 
 <p class="muted">Related: <a href="/methodology">Methodology</a> · <a href="/learn/glossary">Glossary</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback, freeze and trust lines</a> · <a href="/independent">Independence</a> · <a href="/learn">All guides</a> · <a href="/disclaimer">Disclaimer</a></p>`,
+  faq: () => [
+    { q: 'What does "Unverified listing" mean?', a: 'The issuer account points to a project (for example through its on-ledger Domain), but that project\'s own published token list or xrp-ledger.toml does not include this account. The project\'s own source and the account disagree, so ReserveWatch cannot confirm who issued the token or what backs it. ReserveWatch marks this CRITICAL because a holder cannot tell from public sources whether the token is connected to the project it references. A label is a statement about what could be verified. It is not an accusation.' },
+    { q: 'What does "Issuer link unconfirmed" mean?', a: 'Third-party registries or data providers attribute the account to a project, but the project itself publishes no xrp-ledger.toml or official page listing the account. Nothing contradicts the link; it simply cannot be confirmed from the issuer\'s own channels. ReserveWatch marks this WARN. It is common for newer or institution-only (represented) assets that are not marketed to the public.' },
+    { q: 'What do these labels not mean?', a: 'Neither label means the token is a scam, a fake, or unbacked. Neither means anyone has done anything wrong. ReserveWatch makes no allegation against any person or company. A token without the label is not thereby safe or fully backed. Verified identity is one check among many, and ReserveWatch does not audit vaults or attest to reserves. Neither label is investment advice or a recommendation about any token.' },
+    { q: 'How does a label come off?', a: 'Labels follow published rules, the same for every issuer. A label comes off when the project confirms the account from a source it controls — usually by listing the issuer address in its xrp-ledger.toml or on an official token page.' },
+  ],
 };
 
 // ---------- 3. Glossary ----------
@@ -146,6 +160,31 @@ export const GLOSSARY: GlossaryTerm[] = [
   { id: 'unverified-listing', term: 'Unverified listing / Issuer link unconfirmed', def: () => `Soft labels for issuers ReserveWatch could not confirm from the project's own sources. "Unverified listing": the project's own list does not include the account. "Issuer link unconfirmed": third parties attribute the account to a project, but the project publishes nothing listing it. Neither is an allegation. <a href="/learn/unverified-listings">What the labels mean</a>.` },
 ];
 
+/** Visible text of a glossary definition. Cross-links are navigation, not part of the definition. */
+const plain = (html: string) => html
+  .replace(/\s*<a\b[^>]*>.*?<\/a>/gi, '')
+  .replace(/<[^>]+>/g, '')
+  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  .replace(/\s+\./g, '.')
+  .replace(/\.{2,}/g, '.')
+  .replace(/\s+/g, ' ').trim();
+
+/** Question text for a glossary heading already on the page. */
+const glossaryQuestion = (term: string) => ({
+  'AMM TVL': 'What is AMM TVL?',
+  'Circulating vs treasury supply': 'What is circulating supply versus treasury supply?',
+  'Trust line': 'What is a trust line?',
+  'Clawback': 'What is clawback?',
+  'Freeze / NoFreeze': 'What do freeze and NoFreeze mean?',
+  'Global Freeze': 'What is Global Freeze?',
+  'RequireAuth': 'What is RequireAuth?',
+  'Domain / xrp-ledger.toml': 'What are Domain and xrp-ledger.toml?',
+  'OK / WARN / CRITICAL': 'What do OK, WARN and CRITICAL mean?',
+  'Peg deviation': 'What is peg deviation?',
+  'Quote assets (XRP / RLUSD / USDV)': 'What are quote assets (XRP, RLUSD and USDV)?',
+  'Unverified listing / Issuer link unconfirmed': 'What do "Unverified listing" and "Issuer link unconfirmed" mean?',
+}[term] ?? `What is ${term}?`);
+
 const GLOSSARY_GUIDE: LearnGuide = {
   slug: 'glossary',
   title: 'XRPL Commodity Token Glossary: AMM TVL, Trust Lines, Clawback, toml · ReserveWatch',
@@ -162,7 +201,16 @@ const GLOSSARY_GUIDE: LearnGuide = {
     '@context': 'https://schema.org', '@type': 'DefinedTermSet', '@id': url + '#terms', name: 'ReserveWatch glossary of XRPL commodity token terms', url,
     hasDefinedTerm: GLOSSARY.map(g => ({ '@type': 'DefinedTerm', '@id': `${url}#${g.id}`, name: g.term, url: `${url}#${g.id}`, inDefinedTermSet: url + '#terms' })),
   }],
+  faq: c => GLOSSARY.map(g => ({ q: glossaryQuestion(g.term), a: plain(g.def(c)) })),
 };
 
 /** New pillar guides served from this module, in hub order. */
 export const LEARN_GUIDES: LearnGuide[] = [PEG_VS_SPOT, UNVERIFIED, GLOSSARY_GUIDE];
+
+/** FAQ for the clawback pillar (body lives in server.ts). Wording matches that page; no live token lists. */
+export const CLAWBACK_FAQ: { q: string; a: string }[] = [
+  { q: 'What is a trust line?', a: 'On the XRP Ledger, a gold, silver, platinum or other commodity token is an IOU from an issuer, and you hold it through a trust line. Before you can hold one, your account must open a trust line to that issuer. Each trust line ties one holder to one issuer for one currency code. Two tokens with the same code from different issuers are different tokens.' },
+  { q: 'What do freeze, Global Freeze and NoFreeze mean?', a: 'By default an XRPL issuer can freeze one holder\'s trust line: that holder can still send the tokens back to the issuer, but generally cannot send them to anyone else. Global Freeze freezes all of the issuer\'s trust lines at once, so the token stops moving between holders. ReserveWatch marks Global Freeze CRITICAL. NoFreeze gives up freeze power forever; once set, it cannot be undone, and the issuer can no longer freeze lines or turn on Global Freeze. ReserveWatch treats "can freeze" as normal (OK) and shows it for context.' },
+  { q: 'What is clawback?', a: 'Clawback lets an issuer pull tokens out of a holder\'s trust line and back to itself. The issuer switches this on with the allowTrustLineClawback account setting, and the ledger only allows that before the issuer has any trust lines or offers. After it is on, it cannot be switched off, and it cannot be combined with NoFreeze. ReserveWatch marks clawback WARN, not CRITICAL, because it is a legitimate design choice for some regulated issuers. Holders do not have final control of their balance.' },
+  { q: 'Do freeze and clawback settings prove metal is in a vault?', a: 'No. These settings say nothing about whether metal sits in a vault. On-ledger data is not proof of reserves. The page is education, not investment advice.' },
+];
