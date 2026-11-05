@@ -172,6 +172,7 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },
     { loc: abs('/learn/clawback-freeze-trust-lines'), lastmod: legalDate, changefreq: 'monthly', priority: '0.6' },
     ...LEARN_GUIDES.map(g => ({ loc: abs(`/learn/${g.slug}`), lastmod: g.dateModified, changefreq: 'monthly', priority: '0.6' })),
+    { loc: abs('/faq'), lastmod: '2026-11-05', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/privacy'), lastmod: legalDate, changefreq: 'monthly', priority: '0.4' },
     { loc: abs('/disclaimer'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/terms'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },

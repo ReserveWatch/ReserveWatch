@@ -87,9 +87,9 @@ const page = (o: PageOpts) => `<!doctype html><html lang="en"><head><meta charse
 ${o.refresh ? '<meta http-equiv="refresh" content="60">' : ''}${seoHead(o)}<meta name="theme-color" content="#0B1F33">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a> <nav class="muted">commodity tokens · public ledger data only · <a href="/commodities">commodities</a> · <a href="/methodology">methodology</a> · <a href="/alerts">alerts</a> · <a href="/about">about</a> · <a href="/independent">independence</a> · <a href="/api/tokens">API</a> · <a href="/disclaimer">disclaimer</a> · <a href="/privacy">privacy</a></nav></div></header>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a> <nav class="muted">commodity tokens · public ledger data only · <a href="/commodities">commodities</a> · <a href="/methodology">methodology</a> · <a href="/faq">faq</a> · <a href="/alerts">alerts</a> · <a href="/about">about</a> · <a href="/independent">independence</a> · <a href="/api/tokens">API</a> · <a href="/disclaimer">disclaimer</a> · <a href="/privacy">privacy</a></nav></div></header>
 <main>${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/learn">Learn</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Data: public XRPL mainnet (${esc(endpointList()[0])}) + a public spot metal price API (gold, silver, platinum, palladium only). On-ledger data and automated checks only — not investment, financial, legal, or tax advice, and not an endorsement of or accusation against any issuer. Health labels describe automated on-ledger checks, not reserves or solvency.</p>
 <p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed.</p></div></footer></body></html>`;
 
@@ -301,7 +301,8 @@ const METHODOLOGY = () => `
 <li><b>Not an audit.</b> We do not visit, inspect or verify any vault, custodian, or bank account.</li>
 <li><b>Not proof of reserves.</b> On-ledger supply shows how many tokens exist, not how much metal or other commodity backs them.</li>
 <li><b>Not investment advice.</b> Labels are not ratings, recommendations, or opinions on solvency. Do your own research and confirm with the issuer and an independent explorer. See the full <a href="/disclaimer">disclaimer</a>.</li>
-</ul>`;
+</ul>
+<p>Short answers to common questions are on the <a href="/faq">FAQ</a>.</p>`;
 
 const ABOUT = () => `
 <p><b>${SITE_NAME} is an independent, issuer-neutral XRPL commodity reserve health monitor.</b> It reads public XRP Ledger data for tokens that say they represent a commodity — today ${trackedClassList()} — and shows the results in one place with simple automated health labels.</p>
@@ -602,10 +603,10 @@ function learnIndex() {
     path: '/learn',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Learn', path: '/learn' }])],
     body: `<div class="legal"><h1>Learn: XRPL commodity token basics</h1>
-<p>Short, plain-language guides to the ledger settings and numbers ReserveWatch reads. For how the health labels are scored, start with the <a href="/methodology">methodology</a>.</p>
+<p>Short, plain-language guides to the ledger settings and numbers ReserveWatch reads. For how the health labels are scored, start with the <a href="/methodology">methodology</a>. Common questions are on the <a href="/faq">FAQ</a>.</p>
 <h2>Guides</h2><ul>${LEARN_LIVE.map(l => `<li><a href="${l.path}"><b>${esc(l.title)}</b></a><div class="muted">${esc(l.blurb)}</div></li>`).join('')}</ul>
 <h2>By commodity</h2><p>${CLASS_PAGES.map(p => `<a href="/commodities/${p.slug}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join(' · ')}</p>
-<h2>See it in the data</h2><p><a href="/snapshots">Ledger snapshots</a> · <a href="/methodology">Methodology</a> · <a href="/api/tokens">JSON API</a></p></div>` });
+<h2>See it in the data</h2><p><a href="/snapshots">Ledger snapshots</a> · <a href="/methodology">Methodology</a> · <a href="/faq">FAQ</a> · <a href="/api/tokens">JSON API</a></p></div>` });
 }
 
 function clawbackPillar() {
@@ -761,6 +762,64 @@ ${c.elsewhere ? `<h2>Outside the XRP Ledger</h2><p>${esc(c.elsewhere)} ReserveWa
 <p class="muted">How labels are set: <a href="/methodology">methodology</a> · Data: <a href="/api/commodities/${c.slug}">/api/commodities/${c.slug}</a> and <a href="/api/tokens">/api/tokens</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback &amp; freeze explained</a>${related ? ` · Related: ${related}` : ''}</p></div>` });
 }
 
+// ---------- FAQ (/faq) ----------
+const FAQ_UPDATED = 'November 5, 2026';
+/** Plain-text answers only. Links live in `more` so FAQPage JSON-LD stays free of HTML. */
+const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
+  {
+    q: 'What is ReserveWatch?',
+    a: `${SITE_NAME} is an independent, issuer-neutral monitor of commodity tokens on the XRP Ledger — gold, silver, platinum, energy, diamonds and more. It reads public ledger data: circulating supply, issuer flags such as freeze and clawback, AMM liquidity, and on-ledger price compared with a spot price where a public spot reference exists. It publishes automated health labels. The same published rules apply to every issuer. It does not tell anyone to buy, sell, or hold a token.`,
+    more: '<a href="/about">About</a> · <a href="/independent">Independence</a> · <a href="/methodology">Methodology</a>',
+  },
+  {
+    q: 'What is ReserveWatch not?',
+    a: `${SITE_NAME} is not a custodian, not an issuer, and not a vault auditor. It does not hold funds, run wallets, or ask for seeds, private keys, or payments. It is not affiliated with Ripple, the XRPL Foundation, or any token issuer it lists. It does not audit vaults or attest to reserves, and on-ledger supply is not proof of reserves. OK, WARN, and CRITICAL are not credit ratings, recommendations, or opinions on solvency. Nothing on the site is investment, financial, legal, or tax advice.`,
+    more: '<a href="/independent">Independence</a> · <a href="/disclaimer">Disclaimer</a>',
+  },
+  {
+    q: 'What do OK, WARN and CRITICAL mean?',
+    a: `Each token gets several automated checks. Every check is marked OK, WARN, or CRITICAL, and the token's overall label is the worst result among its checks. One CRITICAL check makes the whole token CRITICAL. OK means none of the automated checks found a problem. It does not mean the token is safe, fully backed, or a good buy. It only means the public ledger data ${SITE_NAME} looks at did not trip a rule. WARN means something worth knowing. It may be normal for that kind of token, but it is something to understand before relying on the token. CRITICAL means something that can seriously limit what holders can do, or that ${SITE_NAME} could not confirm at all. The labels describe rule-based checks. They are not ratings, audits, opinions on solvency, or advice.`,
+    more: '<a href="/methodology">How each check is set</a> · <a href="/learn/glossary">Glossary</a>',
+  },
+  {
+    q: 'Is ReserveWatch a vault audit or proof of reserves?',
+    a: `No. ${SITE_NAME} does not visit, inspect, or attest to any vault, custodian, warehouse, or bank account. On-ledger supply counts how many tokens exist. It does not show that a physical commodity exists, is insured, or can be redeemed. On-ledger data is not proof of reserves.`,
+    more: '<a href="/methodology">Methodology</a> · <a href="/disclaimer">Disclaimer</a>',
+  },
+  {
+    q: 'What do "Unverified listing" and "Issuer link unconfirmed" mean?',
+    a: `They are soft labels for issuers ${SITE_NAME} could not confirm from the project's own sources. A label is a statement about what could be verified. It is not an accusation. "Unverified listing" means the issuer account points at a project, but that project's own published token list or xrp-ledger.toml does not include the account. The project's source and the account disagree, so ${SITE_NAME} cannot confirm who issued the token. That check is CRITICAL. "Issuer link unconfirmed" means third-party registries attribute the account to a project, but the project itself publishes no xrp-ledger.toml or official page listing it. Nothing contradicts the link; it simply cannot be confirmed from the issuer's own channels. That check is WARN. Neither label means the token is a scam, a fake, or unbacked, and neither means anyone has done anything wrong. A token without the label is not thereby safe or fully backed.`,
+    more: '<a href="/learn/unverified-listings">What the labels mean</a> · <a href="/methodology">Methodology</a>',
+  },
+  {
+    q: 'Why is peg vs spot sometimes "not measurable" when liquidity is thin?',
+    a: `For gold, silver, platinum and palladium, ${SITE_NAME} compares the spot price of the metal a token says it represents with the price the token trades at on the XRP Ledger. The gap is the peg deviation. A small pool can sit far from spot simply because nobody has traded it back into line. That is a liquidity fact, not a broken peg, and not a sign the metal is missing. ${SITE_NAME} grades the gap only when the price comes from AMM pools holding at least about $${n0(LOW_LIQ_USD)}. Under ${PEG_WARN_PCT}% is OK, ${PEG_WARN_PCT}% to under ${PEG_CRIT_PCT}% is WARN, and ${PEG_CRIT_PCT}% or more is CRITICAL. Below that gate, or when there is no usable pool, the check reads "Peg not measurable" (WARN) and the raw number is marked "not meaningful". A DEX order-book price is never graded as reliable, because its depth is not measured. Oil, natural gas, electricity, uranium, copper, diamonds, timber and crops have no single public spot price that maps onto a token, so those classes show "price vs spot not measured" instead of a guess. A peg reading describes trading prices only. It is not proof that a commodity exists in a vault, and it is not a signal to buy or sell.`,
+    more: '<a href="/learn/peg-vs-spot">Peg vs spot</a> · <a href="/methodology#peg">How peg is measured</a>',
+  },
+  {
+    q: 'How should I cite /api/tokens?',
+    a: `The dataset at ${SITE_URL}/api/tokens is free JSON and free to cite. Attribute "${SITE_NAME}" and link that URL, or the page a reading came from. Per-token JSON is ${SITE_URL}/api/tokens/{id}, using the id from that token's page address. Cache responses. Acceptable use is described on the terms page. Do not describe the labels as an audit, proof of reserves, a credit rating, or investment advice. Readings can be delayed, incomplete, or wrong. Confirm with the issuer and an independent explorer.`,
+    more: '<a href="/api/tokens">/api/tokens</a> · <a href="/terms">Terms of use</a> · <a href="/disclaimer">Disclaimer</a>',
+  },
+];
+
+function faqPage() {
+  const blocks = FAQ_BLOCKS();
+  const description = 'What ReserveWatch is and is not, what OK, WARN and CRITICAL mean, why it is not a vault audit or proof of reserves, what the soft labels mean, peg vs spot when liquidity is thin, and how to cite /api/tokens.';
+  return page({
+    title: 'FAQ: What ReserveWatch Is, Health Labels, and How to Cite the Data · ReserveWatch',
+    description, path: '/faq', ogType: 'article',
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'FAQ', path: '/faq' }]),
+      faqPageLd(blocks.map(({ q, a }) => ({ q, a }))),
+    ],
+    body: `<div class="legal"><h1>Frequently asked questions</h1>
+<p class="muted">Last updated ${FAQ_UPDATED}</p>
+<p class="notice"><b>Short version:</b> ${SITE_NAME} publishes automated readings of public XRP Ledger data. These answers use the same plain words as the <a href="/methodology">methodology</a> and <a href="/learn">learn</a> guides. They are not investment advice, not a vault audit, and not proof of reserves.</p>
+${blocks.map(b => `<h2>${esc(b.q)}</h2><p>${esc(b.a)}</p><p class="muted">More: ${b.more}</p>`).join('\n')}
+<p class="muted">Related: <a href="/methodology">Methodology</a> · <a href="/learn/peg-vs-spot">Peg vs spot</a> · <a href="/learn/unverified-listings">Unverified listings</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback, freeze and trust lines</a> · <a href="/learn/glossary">Glossary</a> · <a href="/learn">All guides</a> · <a href="/api/tokens">JSON API</a> · <a href="/disclaimer">Disclaimer</a></p></div>` });
+}
+
 const commodityJson = (c: ClassPage) => ({
   slug: c.slug, name: c.h1, url: SITE_URL + '/commodities/' + c.slug, codes: c.codes,
   unitLabel: commodityMeta(c.codes[0]).unitLabel, spotReference: c.codes.some(code => !!commodityMeta(code).spotSymbol),
@@ -783,6 +842,11 @@ app.use((q, r, next) => {
 });
 app.get('/robots.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt()); });
 app.get('/llms.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(llmsTxt()); });
+// Crawlers that request /.well-known/llms.txt land on the same summary. /llms.txt stays the canonical URL.
+app.get('/.well-known/llms.txt', (_q, r) => {
+  r.set('Cache-Control', 'public, max-age=3600');
+  r.redirect(301, `${SITE_URL}/llms.txt`);
+});
 app.get('/sitemap.xml', (_q, r) => {
   const live = (snap?.updatedAt ?? new Date().toISOString()).slice(0, 10);
   r.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml(live, LEGAL_UPDATED_ISO));
@@ -807,6 +871,7 @@ app.get('/alerts', (_q, r) => {
     body: `<h1>Health status alert log</h1><p class="muted">Every time an automated on-ledger check changes a token's health label, the transition and its reasons are recorded here (newest data from public XRPL servers). Labels describe automated checks, not reserves or solvency.</p><table><tr><th>At</th><th>Token</th><th>Change</th><th>Reasons</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table>` }));
 });
 app.get('/methodology', (_q, r) => { r.send(infoPage('How ReserveWatch Health Checks Work: OK, WARN, CRITICAL · ReserveWatch', 'Methodology: how the health checks work', '/methodology', 'Plain-language guide to ReserveWatch health labels for XRPL commodity tokens: what OK, WARN and CRITICAL mean, trust lines, freeze, clawback, and how peg vs spot is measured. Not an audit or proof of reserves.', METHODOLOGY())); });
+app.get('/faq', (_q, r) => { r.send(faqPage()); });
 app.get('/about', (_q, r) => { r.send(infoPage('About ReserveWatch — Independent XRPL Commodity Token Monitor', 'About ReserveWatch', '/about', 'ReserveWatch is an independent, issuer-neutral monitor of commodity tokens on the XRP Ledger — gold, silver, platinum, energy, diamonds and more. What it watches, what it does not do, and how to contact us.', ABOUT())); });
 app.get('/independent', (_q, r) => { r.send(page({
   title: 'Independent XRPL Commodity Monitor — Not a Custodian, Issuer or Auditor · ReserveWatch', description: INDEPENDENT_DESC, path: '/independent', ogType: 'article',
