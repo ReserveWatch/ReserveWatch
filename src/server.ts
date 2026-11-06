@@ -75,7 +75,7 @@ body{font-family:var(--sans);font-size:17px;line-height:1.5;margin:0;background:
 .skip{position:absolute;left:12px;top:-40px;background:#fff;color:var(--rw-navy);padding:8px 12px;z-index:5;border-radius:8px}
 .skip:focus{top:12px}
 header{background:#fff;border-bottom:1px solid var(--rw-border)}
-header .wrap,main,footer .wrap{max-width:1120px;margin:auto;padding-left:28px;padding-right:28px}
+header .wrap,main,footer .wrap{max-width:2200px;margin:auto;padding-left:40px;padding-right:40px}
 header .wrap{display:flex;align-items:center;justify-content:space-between;gap:20px 28px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
 header a{color:var(--rw-navy);text-decoration:none}
 header .brand img{height:64px;width:auto;display:block}
@@ -100,7 +100,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var
 .commodities{display:flex;flex-wrap:wrap;gap:8px 16px;margin:18px 0 26px}
 .commodities a{font-weight:650;text-decoration:none;border-bottom:1px solid transparent}
 .commodities a:hover{border-bottom-color:var(--rw-gold);color:var(--rw-gold-ink)}
-.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:18px;margin:0 0 28px}
+/* One full-width card until there is room for two wide ones. Never three or four across. */
+.board{display:grid;grid-template-columns:1fr;gap:24px;margin:0 0 28px}
 .token-card{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:18px;padding:22px 22px 14px;display:flex;flex-direction:column;gap:14px;min-width:0}
 .token-card.edge-critical{border-top:4px solid var(--rw-critical)}
 .token-card.edge-warn{border-top:4px solid var(--rw-warn)}
@@ -123,6 +124,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var
 .tone-gap{background:#F4F6F8;color:var(--rw-gap);border:1px dashed #8B97A4}
 .tone-warn{background:var(--rw-warn);color:#fff;border:1px solid var(--rw-warn)}
 .tone-critical{background:var(--rw-critical);color:#fff;border:1px solid var(--rw-critical)}
+.meter,.peg{max-width:28rem}
 .meter{height:8px;background:#E4DCCB;border-radius:99px;margin-top:10px;overflow:hidden}
 .meter>span{display:block;height:100%;background:var(--rw-navy);border-radius:99px}
 .meter.conc>span{background:var(--rw-gold)}
@@ -137,7 +139,9 @@ a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var
 .alert-banner p{margin:0 0 8px;font-size:1rem;line-height:1.4}
 .alert-banner p:last-child{margin:0}
 .banner-k{display:inline-block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin-right:6px}
-.panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:8px 0 18px}
+/* Market uses the full row. Controls and identity share the next row instead of three equal columns. */
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:8px 0 18px}
+.panels>.panel:first-child{grid-column:1 / -1}
 .panel{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:16px;padding:18px 18px 12px;min-width:0}
 .panel h2{font-family:var(--sans);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;font-weight:750;color:var(--rw-gold-ink);margin:0 0 10px}
 .fold{margin:8px 0}
@@ -175,7 +179,11 @@ main{padding-top:24px}
 .card-top{flex-direction:column}
 .supply{text-align:left}
 .panels{grid-template-columns:1fr}
+.panels>.panel:first-child{grid-column:auto}
 .token-card,.panel{padding:16px}
+}
+@media (min-width:1100px){
+.board{grid-template-columns:1fr 1fr}
 }`
 
 interface PageOpts extends SeoMeta { body: string; /** Auto-refresh live-data pages for open browser tabs. */ refresh?: boolean }

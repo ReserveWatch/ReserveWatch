@@ -10,7 +10,7 @@
     "check": "tsx src/check.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/presentation.test.ts test/face.test.ts",
+    "test": "tsx --test test/presentation.test.ts test/face.test.ts test/layout.test.ts",
     "start:prod": "node --env-file-if-exists=.env dist/server.js"
   },
   "keywords": [],
