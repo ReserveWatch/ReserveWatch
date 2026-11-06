@@ -12,7 +12,8 @@ import { SNAPSHOTS, type WeeklySnapshot, type SnapToken } from './content/snapsh
 import { BRIEFS, HOW_TO_ADD, type Brief } from './content/briefs.js';
 import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './content/learn.js';
 import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
-import { itemsOf, presentFromReport, PRESENTATION_MODEL, type Presentation, type PresentItem, type PresentTone } from './presentation.js';
+import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
+import { renderDetailLead, renderHomeCard } from './face.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -65,56 +66,116 @@ const usd = (n: number | null | undefined, d = 2) => n == null || !Number.isFini
 const badge = (s: Severity) => `<span class="badge ${s}">${s.toUpperCase()}</span>`;
 const acct = (a: string) => `<a href="https://xrpscan.com/account/${esc(a)}" target="_blank" rel="noopener"><code>${esc(a)}</code></a>`;
 
-// ReserveWatch locked brand palette (see /workspace/reservewatch/brand/logo-official.png).
-const CSS = `:root{--rw-navy:#0B1F33;--rw-gold:#94801C;--rw-gold-muted:#C4A35A;--rw-gold-logo:#B6821F;--rw-surface:#F7F5F0;--rw-card:#FFFFFF;--rw-text:#1A1A1A;
---rw-muted:#5A6573;--rw-border:#E2DED3;--rw-ok:#2F6B4F;--rw-warn:#B8860B;--rw-critical:#A33B2B}
-body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:var(--rw-surface);color:var(--rw-text)}
-header{padding:16px 24px;background:var(--rw-surface);border-bottom:3px solid var(--rw-navy)}
-header .wrap{max-width:1320px;margin:auto;display:flex;align-items:center;flex-wrap:wrap;gap:10px 32px}
-header a{color:var(--rw-navy);text-decoration:none}header .brand{display:inline-flex;align-items:center}header .brand img{height:96px;width:auto;max-width:100%;display:block}
-header nav{font-size:15px}@media(max-width:600px){header .brand img{height:auto;width:100%}}
-header nav a{color:var(--rw-navy);font-weight:600}header nav a:hover{color:var(--rw-gold)}
-main{padding:24px;max-width:1320px;margin:auto}table{border-collapse:collapse;width:100%;margin:12px 0}
-h1,h2,h3{color:var(--rw-navy)}h1{font-size:1.5em;margin:.6em 0 .4em}
-th,td{padding:8px 10px;border-bottom:1px solid var(--rw-border);text-align:left;vertical-align:top;font-size:14px}th{color:var(--rw-navy);font-weight:600}
-a{color:var(--rw-navy);text-decoration-color:var(--rw-gold)}a:hover{color:var(--rw-gold)}code{font-size:12px}.badge{padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;color:#fff}
-.ok{background:var(--rw-ok);color:#fff}.warn{background:var(--rw-warn);color:#fff}.critical{background:var(--rw-critical);color:#fff}
-span.critical{padding:0 4px;border-radius:4px}
-.muted{color:var(--rw-muted);font-size:13px}.card{background:var(--rw-card);border:1px solid var(--rw-border);border-top:3px solid var(--rw-gold-muted);border-radius:8px;padding:16px;margin:16px 0}
-.pill{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--rw-navy);background:#EFE9D6;border:1px solid var(--rw-gold-muted);vertical-align:middle}
-.notice{background:#FBF8EF;border:1px solid var(--rw-border);border-left:4px solid var(--rw-gold-muted);border-radius:6px;padding:12px 16px;margin:12px 0;font-size:14px}
-footer{border-top:3px solid var(--rw-navy);background:var(--rw-surface);margin-top:32px}footer .wrap{max-width:1320px;margin:auto;padding:16px 24px;font-size:13px;color:var(--rw-muted)}
-footer nav a{margin-right:16px;font-weight:600}.legal{max-width:820px}.legal p,.legal li{line-height:1.55}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.kv b{display:block;color:var(--rw-muted);font-size:12px;font-weight:600}
-.chip{display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:650;line-height:1.4;border:1px solid transparent;max-width:100%}
+// ReserveWatch locked brand. Logo file is unchanged. Small gold text uses a darker gold so it stays readable on the paper background; #94801C remains the rule, border, and mark color.
+const CSS = `:root{--rw-navy:#0B1F33;--rw-gold:#94801C;--rw-gold-ink:#5C4C0C;--rw-gold-wash:#F7F1E2;--rw-surface:#F3F0E8;--rw-card:#FFFcf8;--rw-text:#14202B;
+--rw-muted:#4E5C6A;--rw-border:#E3DACA;--rw-ok:#145C38;--rw-ok-wash:#E6F3EC;--rw-warn:#7A5A10;--rw-critical:#8E2F24;--rw-gap:#3A4654;
+--serif:Georgia,"Iowan Old Style",Palatino,"Palatino Linotype",serif;--sans:system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{font-family:var(--sans);font-size:17px;line-height:1.5;margin:0;background:var(--rw-surface);color:var(--rw-text)}
+.skip{position:absolute;left:12px;top:-40px;background:#fff;color:var(--rw-navy);padding:8px 12px;z-index:5;border-radius:8px}
+.skip:focus{top:12px}
+header{background:#fff;border-bottom:1px solid var(--rw-border)}
+header .wrap,main,footer .wrap{max-width:1120px;margin:auto;padding-left:28px;padding-right:28px}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:20px 28px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+header a{color:var(--rw-navy);text-decoration:none}
+header .brand img{height:64px;width:auto;display:block}
+header nav{display:flex;flex-wrap:wrap;gap:8px 18px}
+header nav a{font-size:0.95rem;font-weight:650}
+header nav a:hover{color:var(--rw-gold-ink)}
+main{padding-top:36px;padding-bottom:64px}
+h1,h2,.token-card h2{font-family:var(--serif);font-weight:500;letter-spacing:-0.02em;color:var(--rw-navy)}
+h1{font-size:clamp(2rem,4.4vw,3.15rem);line-height:1.12;margin:0 0 .35em}
+h2{font-size:1.55rem;margin:1.4em 0 .4em}
+h3{margin:0 0 8px;font-family:var(--sans);font-size:0.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--rw-gold-ink);font-weight:750}
+a{color:var(--rw-navy)}a:hover{color:var(--rw-gold-ink)}
+a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var(--rw-gold);outline-offset:3px}
+.lede{font-size:1.2rem;line-height:1.45;max-width:38rem;margin:0 0 1rem;color:var(--rw-navy)}
+.asof{color:var(--rw-muted);font-size:0.92rem;margin:0 0 1.1rem}
+.mast{margin-bottom:8px}
+.legend-row{list-style:none;display:flex;flex-wrap:wrap;gap:8px 18px;padding:0;margin:0 0 8px}
+.legend-row li{display:flex;align-items:baseline;gap:8px;font-weight:650;color:var(--rw-navy)}
+.legend-row li span{font-weight:450;color:var(--rw-muted)}
+.swatch{width:11px;height:11px;border-radius:99px;display:inline-block;position:relative;top:1px;flex:none}
+.swatch.tone-measured{background:var(--rw-ok)}.swatch.tone-feature{background:var(--rw-navy)}.swatch.tone-gap{background:#fff;border:1.5px dashed var(--rw-gap)}.swatch.tone-critical{background:var(--rw-critical)}
+.commodities{display:flex;flex-wrap:wrap;gap:8px 16px;margin:18px 0 26px}
+.commodities a{font-weight:650;text-decoration:none;border-bottom:1px solid transparent}
+.commodities a:hover{border-bottom-color:var(--rw-gold);color:var(--rw-gold-ink)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:18px;margin:0 0 28px}
+.token-card{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:18px;padding:22px 22px 14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.token-card.edge-critical{border-top:4px solid var(--rw-critical)}
+.token-card.edge-warn{border-top:4px solid var(--rw-warn)}
+.card-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.card-top>div:first-child{flex:1;min-width:0}
+.supply{flex:none}
+.token-card h2{font-size:1.55rem;line-height:1.15;margin:0;overflow-wrap:break-word}
+.token-card h2 a{text-decoration:none}
+.card-sub{margin:.35em 0 0;color:var(--rw-muted);font-size:.92rem}
+.supply{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.supply b{display:block;font-size:1.35rem;color:var(--rw-navy);font-weight:650}
+.supply span{color:var(--rw-muted);font-size:.85rem}
+.groups{display:flex;flex-direction:column;gap:12px}
+.readout{margin:0;font-size:1.02rem;color:var(--rw-navy);font-weight:600}
+.facts{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-block;margin:0;padding:3px 9px;border-radius:999px;font-size:.84rem;font-weight:650;line-height:1.35;max-width:100%}
 .chip .kicker{font-weight:750;margin-right:4px}
-.tone-measured{background:#E7F2EB;color:var(--rw-ok);border-color:#B7D4C4}
-.tone-feature{background:#F4F1EA;color:var(--rw-navy);border-color:var(--rw-border)}
-.tone-gap{background:#F4F5F7;color:#3E4A59;border:1px dashed #8B95A3}
-.tone-warn{background:var(--rw-warn);color:#fff;border-color:var(--rw-warn)}
-.tone-critical{background:var(--rw-critical);color:#fff;border-color:var(--rw-critical)}
-.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin:12px 0}
-.legend div{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.45}
-.cmp-row{display:grid;grid-template-columns:minmax(190px,1.25fr) repeat(3,minmax(150px,1fr)) minmax(84px,.55fr);gap:10px 12px;align-items:start;padding:12px 0;border-bottom:1px solid var(--rw-border)}
-.cmp-head{font-size:12px;font-weight:700;color:var(--rw-navy);padding-bottom:0}
-.legacy-mark{font-weight:750;font-size:12px;letter-spacing:.03em;background:none;padding:0}
-.legacy-ok{color:var(--rw-ok)}
-.legacy-warn{color:#8A6A10}
-.legacy-critical{color:var(--rw-critical)}
-.legacy-note{font-size:11px;color:var(--rw-muted)}
-.figs{margin-top:4px}
-.cat-k{display:none;font-size:11px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;color:var(--rw-navy);margin-bottom:4px}
-.alert-banner{border:1px solid #E4C4BC;border-left:4px solid var(--rw-critical);background:#FDF6F4;padding:12px 16px;border-radius:6px;margin:12px 0}
-.alert-banner.caution{border-color:#E6D7A8;border-left-color:var(--rw-warn);background:#FBF8EF}
-.alert-banner p{margin:8px 0}
-.cat-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
-.cat-panel{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:8px;padding:12px 14px}
-.cat-panel h3{margin:0 0 8px;font-size:15px}
-.cat-panel .item{margin:0 0 10px;font-size:14px;line-height:1.45}
-@media(max-width:860px){
-.cmp-head{display:none}
-.cmp-row{grid-template-columns:1fr;gap:8px;background:var(--rw-card);border:1px solid var(--rw-border);border-radius:8px;padding:12px;margin:10px 0}
-.cat-k{display:block}
+.tone-measured{background:var(--rw-ok-wash);color:var(--rw-ok);border:1px solid #B7D7C6}
+.tone-feature{background:#F6F3EC;color:var(--rw-navy);border:1px solid var(--rw-border)}
+.tone-gap{background:#F4F6F8;color:var(--rw-gap);border:1px dashed #8B97A4}
+.tone-warn{background:var(--rw-warn);color:#fff;border:1px solid var(--rw-warn)}
+.tone-critical{background:var(--rw-critical);color:#fff;border:1px solid var(--rw-critical)}
+.meter{height:8px;background:#E4DCCB;border-radius:99px;margin-top:10px;overflow:hidden}
+.meter>span{display:block;height:100%;background:var(--rw-navy);border-radius:99px}
+.meter.conc>span{background:var(--rw-gold)}
+.meter-cap{margin:.4em 0 0;color:var(--rw-muted);font-size:.8rem;line-height:1.4}
+.peg-track{position:relative;height:10px;margin-top:12px;background:#E4DCCB;border-radius:99px}
+.peg-mark{position:absolute;top:-4px;width:3px;height:18px;background:var(--rw-navy);border-radius:2px;transform:translateX(-1px)}
+.card-foot{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--rw-border);padding-top:10px;margin-top:auto}
+.legacy-mark{font-weight:750;font-size:.78rem;letter-spacing:.06em;background:none;color:var(--rw-muted)}
+.legacy-ok{color:var(--rw-ok)}.legacy-warn{color:var(--rw-warn)}.legacy-critical{color:var(--rw-critical)}
+.alert-banner{background:var(--rw-critical);color:#fff;border-radius:12px;padding:12px 14px;margin:0 0 4px}
+.alert-banner.caution{background:var(--rw-warn)}
+.alert-banner p{margin:0 0 8px;font-size:1rem;line-height:1.4}
+.alert-banner p:last-child{margin:0}
+.banner-k{display:inline-block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin-right:6px}
+.panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:8px 0 18px}
+.panel{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:16px;padding:18px 18px 12px;min-width:0}
+.panel h2{font-family:var(--sans);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;font-weight:750;color:var(--rw-gold-ink);margin:0 0 10px}
+.fold{margin:8px 0}
+.fold summary{cursor:pointer;font-weight:650;color:var(--rw-navy)}
+.fold-body{padding:8px 0 2px}
+.fold-body p{margin:0 0 8px}
+.crumb{margin:0 0 6px;font-size:.92rem}
+.stats{margin-top:8px}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-variant-numeric:tabular-nums}
+.table-wrap{overflow-x:auto;max-width:100%}
+th,td{padding:10px 12px;border-bottom:1px solid var(--rw-border);text-align:left;vertical-align:top;font-size:.92rem}
+th{color:var(--rw-navy);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:750}
+code{font-size:.82rem}
+.kv{min-width:0}
+.scrollcode{display:block;max-width:100%;overflow-x:auto;white-space:nowrap}
+.badge{padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:750;color:#fff}
+.ok{background:var(--rw-ok);color:#fff}.warn{background:var(--rw-warn);color:#fff}.critical{background:var(--rw-critical);color:#fff}
+.muted{color:var(--rw-muted);font-size:.92rem}
+.card{background:var(--rw-card);border:1px solid var(--rw-border);border-radius:16px;padding:18px;margin:16px 0}
+.pill{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:750;letter-spacing:.03em;color:var(--rw-navy);background:var(--rw-gold-wash);border:1px solid #E4D7B0;vertical-align:middle;font-family:var(--sans)}
+.notice{background:transparent;border:0;border-left:3px solid var(--rw-gold);padding:2px 0 2px 14px;margin:14px 0;color:var(--rw-navy)}
+footer{border-top:1px solid var(--rw-border);background:#fff;margin-top:12px}
+footer .wrap{padding-top:22px;padding-bottom:28px;font-size:.9rem;color:var(--rw-muted)}
+footer nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin-bottom:12px}
+footer nav a{font-weight:650;text-decoration:none}
+.legal{max-width:42rem}.legal p,.legal li{line-height:1.6}
+.legal-wide{max-width:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px 18px}
+.kv b{display:block;color:var(--rw-gold-ink);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:750;margin-bottom:3px}
+.fail{color:var(--rw-critical)}
+@media(max-width:720px){
+header .wrap,main,footer .wrap{padding-left:16px;padding-right:16px}
+header .brand img{height:52px;width:auto}
+main{padding-top:24px}
+.card-top{flex-direction:column}
+.supply{text-align:left}
+.panels{grid-template-columns:1fr}
+.token-card,.panel{padding:16px}
 }`
 
 interface PageOpts extends SeoMeta { body: string; /** Auto-refresh live-data pages for open browser tabs. */ refresh?: boolean }
@@ -122,100 +183,59 @@ const page = (o: PageOpts) => `<!doctype html><html lang="en"><head><meta charse
 ${o.refresh ? '<meta http-equiv="refresh" content="60">' : ''}${seoHead(o)}<meta name="theme-color" content="#0B1F33">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a> <nav class="muted">commodity tokens · public ledger data only · <a href="/commodities">commodities</a> · <a href="/methodology">methodology</a> · <a href="/faq">faq</a> · <a href="/alerts">alerts</a> · <a href="/briefs">briefs</a> · <a href="/about">about</a> · <a href="/independent">independence</a> · <a href="/api/tokens">API</a> · <a href="/disclaimer">disclaimer</a> · <a href="/privacy">privacy</a></nav></div></header>
-<main>${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
-<p>Data: public XRPL mainnet (${esc(endpointList()[0])}) + a public spot metal price API (gold, silver, platinum, palladium only). On-ledger data and automated checks only — not investment, financial, legal, or tax advice, and not an endorsement of or accusation against any issuer. The comparison (measured, feature, not confirmed / not measurable, caution) is not a buy or no-buy rating. The legacy OK / WARN / CRITICAL overall is the worst raw check. Neither is proof of reserves or solvency.</p>
-<p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed.</p></div></footer></body></html>`;
+<a class="skip" href="#content">Skip to content</a>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
+<main id="content">${o.body}</main>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
+<p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Ledger: ${esc(endpointList()[0])}.</p></div></footer></body></html>`;
 
 function header(): string {
   if (!snap) return `<div class="card">${lastError ? `Snapshot error: ${esc(lastError)}` : 'Loading first snapshot from XRPL… refresh in a few seconds.'}</div>`;
-  return `<p class="muted">Last updated <b>${esc(snap.updatedAt)}</b> (took ${snap.durationMs} ms) · XRP/USD ${usd(snap.xrpUsd, 4)} via ${esc(snap.xrpUsdSource)} · refresh every ${POLL_SEC}s${lastError ? ` · <span class="critical">last refresh failed: ${esc(lastError)}</span>` : ''}</p>`;
+  const src = snap.xrpUsdSource;
+  const shortSrc = src.includes(' AMM ') ? src.slice(0, src.indexOf(' AMM ') + 4) : src;
+  return `<p class="asof">Updated <b>${esc(snap.updatedAt)}</b> · XRP/USD ${usd(snap.xrpUsd, 4)} · <span title="${esc(src)}">${esc(shortSrc)}</span>${lastError ? ` · <strong class="fail">refresh failed: ${esc(lastError)}</strong>` : ''}</p>`;
 }
 
 const labelPill = (t: { label?: string }) => t.label ? `<span class="pill" title="Shown for transparency; not an endorsement or an allegation">${esc(t.label)}</span>` : '';
 
 const KICKER: Record<PresentTone, string> = {
-  measured: 'Measured', feature: 'Feature', gap: 'Not measurable', warn: 'Caution', critical: 'Critical',
+  measured: 'Measured', feature: 'Feature', gap: 'Gap', warn: 'Caution', critical: 'Critical',
 };
 const chipKicker = (it: PresentItem) => it.kicker ?? (it.tone === 'gap' ? (it.gapKind === 'not-confirmed' ? 'Not confirmed' : 'Not measurable') : KICKER[it.tone]);
-const chip = (it: PresentItem) => `<span class="chip tone-${it.tone}" title="${esc(it.detail)}"><span class="kicker">${esc(chipKicker(it))}</span>${esc(it.label)}</span>`;
+const chip = (it: PresentItem) => `<span class="chip tone-${it.tone}" title="${esc(it.detail)}" aria-label="${esc(chipKicker(it))}: ${esc(it.label)}">${esc(it.label)}</span>`;
 const chips = (items: PresentItem[]) => items.map(chip).join('') || '<span class="muted">—</span>';
 
-function viewOf(t: TokenReport): Presentation {
+function viewOf(t: TokenReport) {
   return presentFromReport(t);
 }
 
-/** Filled WARN/CRITICAL chips only. Features and gaps stay in the category columns, not in this banner. */
-function attentionBanner(p: Presentation): string {
-  const hot = itemsOf(p).filter(i => i.tone === 'critical' || i.tone === 'warn');
-  if (!hot.length) return '';
-  const crit = hot.some(i => i.tone === 'critical');
-  return `<div class="alert-banner${crit ? '' : ' caution'}" role="note">${hot.map(i => `<p>${chip(i)} ${esc(i.detail)}</p>`).join('')}</div>`;
-}
-
-function categoryPanels(p: Presentation): string {
-  return `<div class="cat-panels">${(['market', 'controls', 'identity'] as const).map(id => {
-    const c = p.categories[id];
-    const body = c.items.map(i => `<p class="item">${chip(i)} ${esc(i.detail)}</p>`).join('') || '<p class="muted">Nothing classified.</p>';
-    const extra = id === 'market' ? `<p class="muted figs">${esc(p.marketFigures)}</p>` : '';
-    return `<section class="cat-panel"><h3>${esc(c.title)}</h3>${body}${extra}</section>`;
-  }).join('')}</div>`;
-}
-
-function compareLegend(): string {
-  return `<div class="legend">
-<div><span class="chip tone-measured"><span class="kicker">Measured</span>reading taken</span> Liquidity at or above about $${n0(LOW_LIQ_USD)}, a reliable price within ${PEG_WARN_PCT}% of spot, or an issuer listed in its own xrp-ledger.toml. Not a safety rating and not proof of backing.</div>
-<div><span class="chip tone-feature"><span class="kicker">Feature</span>issuer power</span> Clawback, restricted access (RequireAuth), a concentrated holder, or the retained ability to freeze. It says what holders are exposed to. It is not an adverse event, and it is not risk-free. Empty frozen lines use the same neutral style, labeled Noted.</div>
-<div><span class="chip tone-gap"><span class="kicker">Not measurable</span>or not confirmed</span> The reading is missing. No pool is not a broken peg. An unconfirmed issuer link is not a fraud finding. A missing domain file is not the same as a project list that contradicts the account.</div>
-<div><span class="chip tone-critical"><span class="kicker">Critical</span>active problem</span> Reserved for Global Freeze, a discontinued token, a reliable peg ${PEG_CRIT_PCT}% or more from spot, supply actually frozen, or issuer records that disagree with the account. A reliable peg ${PEG_WARN_PCT}%–${PEG_CRIT_PCT}% from spot is <span class="chip tone-warn"><span class="kicker">Caution</span></span>. Not an accusation.</div>
-<div><b>Legacy overall</b> The older worst-check label (OK / WARN / CRITICAL). One feature or one gap still makes it WARN. Kept for the API <code>status</code> field, alerts, and past snapshots. Not a buy or no-buy rating.</div>
-</div>`;
-}
-
-const legacyBit = (s: Severity) => `<div class="cmp-legacy" title="Legacy worst-check aggregate. A feature or a gap still counts as WARN. Not a buy or no-buy rating."><span class="cat-k">Legacy overall</span><span class="legacy-mark legacy-${s}">${s.toUpperCase()}</span><div class="legacy-note">worst check</div></div>`;
-
-function compareRow(t: TokenReport): string {
-  const p = viewOf(t);
-  const cm = commodityMeta(t.metal);
-  return `<div class="cmp-row">
-<div class="cmp-token"><a href="/token/${esc(t.id)}"><b>${esc(t.name)}</b></a>${labelPill(t)}<div class="muted">${esc(t.project)}</div><div class="muted"><a href="/commodities/${esc(cm.slug)}">${esc(cm.title)}</a> · ${fmt(t.supply.circulating)} ${esc(t.displayCode)} · ${fmt(t.holders.nonZero, 0)} holders</div></div>
-<div class="cmp-cat" data-label="Market"><span class="cat-k">Market, liquidity and peg</span>${chips(p.categories.market.items)}<div class="muted figs">${esc(p.marketFigures)}</div></div>
-<div class="cmp-cat" data-label="Controls"><span class="cat-k">Issuer controls</span>${chips(p.categories.controls.items)}</div>
-<div class="cmp-cat" data-label="Identity"><span class="cat-k">Identity and verification</span>${chips(p.categories.identity.items)}</div>
-${legacyBit(t.status)}
-</div>`;
-}
-
-/** Which quote assets' AMM pools contributed liquidity, e.g. "via USDV" or "via XRP + USDV". */
-const quoteNote = (t: TokenReport) => {
-  const q = t.liquidity?.quoteAssets ?? t.pools.filter(p => p.exists && (p.tvlUsd ?? 0) > 0).map(p => p.counterAsset ?? '');
-  return q.length ? `<div class="muted">via ${esc(q.join(' + '))}</div>` : '';
-};
-
-/** Peg cell: only headline a % deviation when liquidity makes it meaningful. */
-function pegCell(t: TokenReport): string {
-  if (t.peg.referenceUsd == null) return `—<div class="muted">no usable on-ledger price</div>`;
-  if (!t.peg.reliable) return `<span class="muted">${usd(t.peg.referenceUsd, 4)}</span><div class="muted" title="${esc(t.peg.note ?? '')}">thin liquidity${t.peg.liquidityUsd != null ? ` ($${fmt(t.peg.liquidityUsd, 0)} TVL)` : ''} — not a peg reading</div>`;
-  return `${usd(t.peg.referenceUsd, 4)}<div class="muted">${fmt(t.peg.deviationPct, 2)}% vs spot</div>`;
-}
-
 function listPage() {
-  const rows = (snap?.tokens ?? []).map(compareRow).join('');
+  const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
   return page({
     title: 'Compare XRPL Commodity Tokens: Controls, Liquidity, Verification · ReserveWatch',
     description: DEFAULT_DESCRIPTION, path: '/', refresh: true,
     jsonLd: [orgLd(CONTACT_EMAIL), websiteLd(), datasetLd(snap?.updatedAt)],
-    body: `<h1>Compare XRPL commodity tokens: issuer controls, liquidity, and public verification.</h1>${header()}
-<p class="notice">A comparison of public XRP Ledger readings — not a buy or no-buy list. Measured facts, issuer features, and information gaps are labeled separately from active problems. Tokens marked <span class="pill">Unverified listing</span> have issuer records that disagree with the account; that is conflicting evidence, not an accusation. How this is classified: <a href="/methodology">methodology</a>. See the <a href="/disclaimer">disclaimer</a>.</p>
-${compareLegend()}
-<p>${classStrip()}</p>
-<div class="cmp" role="table" aria-label="Commodity token comparison">
-<div class="cmp-row cmp-head" role="row"><div>Token</div><div>Market, liquidity and peg</div><div>Issuer controls</div><div>Identity and verification</div><div>Legacy overall</div></div>
-${rows || '<p class="muted">No tokens in this reading yet.</p>'}
-</div>
-<p class="muted">RLUSD and USDV pools are valued at a nominal $1. That is the issuer-stated peg, not a reserve check, and USDV is not graded as a commodity. Raw check severities still feed the legacy overall, the <a href="/alerts">alert log</a>, and <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> are unchanged; <code>presentation</code> is the comparison, model ${PRESENTATION_MODEL}).</p>
-<p class="muted">ReserveWatch is an issuer-neutral ${TAGLINE.toLowerCase()}: it reads public XRP Ledger data for commodity tokens — today ${esc(trackedClassList())}. Other commodity classes (oil, natural gas, copper, timber, crops and more) have explainer pages and get live checks as soon as a public XRPL issuer can be confirmed. It does not audit vaults or attest to reserves.</p>` });
+    body: `<div class="mast"><h1>Compare XRPL commodity tokens</h1>
+<p class="lede">Issuer controls, liquidity, and public verification. Public ledger readings, not a buy or sell list.</p>
+${header()}
+<ul class="legend-row">
+<li><i class="swatch tone-measured" aria-hidden="true"></i> Measured <span>a reading, not a safety rating</span></li>
+<li><i class="swatch tone-feature" aria-hidden="true"></i> Feature <span>an issuer power</span></li>
+<li><i class="swatch tone-gap" aria-hidden="true"></i> Gap <span>not confirmed, or not measurable</span></li>
+<li><i class="swatch tone-critical" aria-hidden="true"></i> Critical <span>an active problem, always on the card</span></li>
+</ul>
+<details class="fold"><summary>What the labels mean</summary><div class="fold-body">
+<p><b>Measured</b> means the reading could be taken: pool depth at or above about $${n0(LOW_LIQ_USD)}, a reliable price within ${PEG_WARN_PCT}% of spot, or an issuer listed in its own xrp-ledger.toml. It is not proof of backing.</p>
+<p><b>Feature</b> means clawback, restricted access, a concentrated holder, or the ability to freeze a line. It says what holders are exposed to. It is not an adverse event, and it is not risk-free.</p>
+<p><b>Gap</b> means the data is missing. No pool is not a broken peg. An unconfirmed issuer link is not a fraud finding.</p>
+<p><b>Caution and Critical</b> are only for an active problem or conflicting records: Global Freeze, a discontinued token, a reliable peg at least ${PEG_WARN_PCT}% from spot, supply that is actually frozen, or issuer records that disagree with the account. Those lines stay on the card. They are not accusations.</p>
+<p>Legacy OK / WARN / CRITICAL is the older worst raw check. A feature or a gap still makes it WARN. It remains the API <code>status</code> field. <a href="/methodology">Full rules</a> · <a href="/disclaimer">disclaimer</a>.</p>
+<p>RLUSD and USDV are valued at a nominal $1. That is the issuer-stated peg, not a reserve check. USDV is not graded as a commodity.</p>
+</div></details></div>
+${classStrip()}
+<div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>
+<p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>` });
 }
 
 const METAL_NAME: Record<string, string> = Object.fromEntries(Object.entries(COMMODITY_META).map(([k, v]) => [k, v.name]));
@@ -223,7 +243,8 @@ const METAL_NAME: Record<string, string> = Object.fromEntries(Object.entries(COM
 const trackedClasses = () => Object.keys(COMMODITY_META).filter(c => TOKENS.some(t => t.metal === c));
 const trackedClassList = () => { const n = trackedClasses().map(c => commodityMeta(c).name); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n.join(''); };
 function classStrip(): string {
-  return 'Browse by commodity: ' + CLASS_PAGES.map(p => `<a href="/commodities/${p.slug}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join(' · ') + ' · <a href="/commodities">all commodities</a>';
+  const links = CLASS_PAGES.filter(p => classTokens(p).length).map(p => `<a href="/commodities/${p.slug}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join('') + '<a href="/commodities">All classes</a>';
+  return `<nav class="commodities" aria-label="Commodities">${links}</nav>`;
 }
 type TokenMeta = { id: string; name: string; displayCode: string; metal: string };
 const tokenTitle = (t: TokenMeta) => `${t.name}${t.name.includes(t.displayCode) ? '' : ` (${t.displayCode})`} on XRPL — controls, liquidity, verification · ReserveWatch`;
@@ -239,17 +260,17 @@ function tokenPage(t: TokenReport) {
   const bookRows = t.books.map(b => `<tr><td>${esc(b.pair)}</td><td>${usd(b.bestBidUsd, 4)} <span class="muted">(${b.fundedBids ?? b.bidCount}/${b.bidCount} funded)</span></td><td>${usd(b.bestAskUsd, 4)} <span class="muted">(${b.fundedAsks ?? b.askCount}/${b.askCount} funded)</span></td><td>${b.spreadPct == null ? '—' : fmt(b.spreadPct, 1) + '%'}</td></tr>`).join('');
   const holderRows = t.holders.topHolders.map(h => `<tr><td>${acct(h.account)}${h.label ? ` <span class="muted">(${esc(h.label)})</span>` : ''}</td><td>${fmt(h.balance, 4)}</td><td>${fmt(h.pct, 2)}%</td></tr>`).join('');
   const checks = t.checks.map(c => `<tr><td>${badge(c.severity)}</td><td>${esc(c.key)}</td><td>${esc(c.message)}</td></tr>`).join('');
-  const presented = viewOf(t);
   return page({
     title: tokenTitle(t), description: tokenDescription(t), path: `/token/${t.id}`, refresh: true,
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }, { name: commodityMeta(t.metal).title, path: `/commodities/${commodityMeta(t.metal).slug}` }, { name: t.name, path: `/token/${t.id}` }])],
-    body: `<h1>${esc(t.name)}${labelPill(t)}</h1>${header()}
-<p class="legacy-note">Legacy overall <span class="legacy-mark legacy-${t.status}">${t.status.toUpperCase()}</span> — worst raw check, kept for the API and the alert log. Not a buy or no-buy rating. <a href="/methodology">How the comparison differs</a>.</p>
-${attentionBanner(presented)}
-${categoryPanels(presented)}
-<div class="card grid">
-<div class="kv"><b>Issuer</b>${acct(t.issuer)}</div>
-<div class="kv"><b>Currency code</b><code>${esc(t.currency)}</code> (${esc(t.displayCode)})</div>
+    body: `<p class="crumb"><a href="/commodities/${esc(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)}</a></p>
+<h1>${esc(t.name)}${labelPill(t)}</h1>
+<p class="asof">${fmt(t.supply.circulating, 0)} ${esc(t.displayCode)} circulating · ${fmt(t.holders.nonZero, 0)} holders · Legacy <span class="legacy-mark legacy-${t.status}">${t.status.toUpperCase()}</span> · <a href="/methodology">how labels differ</a></p>
+${header()}
+${renderDetailLead(t)}
+<div class="card stats grid">
+<div class="kv"><b>Issuer</b><span class="scrollcode">${acct(t.issuer)}</span></div>
+<div class="kv"><b>Currency code</b><span class="scrollcode"><code>${esc(t.currency)}</code> (${esc(t.displayCode)})</span></div>
 <div class="kv"><b>Commodity class</b><a href="/commodities/${esc(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)}</a>${t.tokenization === 'represented' ? '<div class="muted">represented asset (issuer-held record)</div>' : ''}</div>
 <div class="kv"><b>Unit</b>${t.gramsPerToken > 0 ? `1 token = ${fmt(t.gramsPerToken, 4)} g ${esc(METAL_NAME[t.metal] ?? t.metal)}` : esc(t.unitText ?? 'Not published by the issuer')}</div>
 <div class="kv"><b>Domain (on-ledger)</b>${esc(t.domain ?? '—')}<div class="muted">${t.domainVerified === true ? '✔ verified via xrp-ledger.toml' : t.domainVerified === false ? '✖ not verified' : 'no domain claim'}</div></div>
@@ -265,14 +286,16 @@ ${categoryPanels(presented)}
 <div class="kv"><b>Frozen lines</b>${fmt(t.holders.frozenLines, 0)} (${fmt(t.holders.frozenBalance, 4)} tokens)</div>
 <div class="kv"><b>Ledger</b>${esc(t.ledgerIndex ?? '—')}</div>
 </div>
-<h3>Raw automated checks</h3>
+<details class="fold"><summary>Raw automated checks</summary><div class="fold-body">
 <p class="muted">These severities are the legacy model. They are not relabeled. One WARN still makes the legacy overall WARN, including a feature or a gap. The comparison above is a separate reading of the same facts. Historical snapshots keep the legacy labels they were published with.</p>
-<table>${checks}</table>
-<h3>Issuer control flags</h3><table><tr><th>Flag</th><th>Value</th></tr>${flagRows}</table>
-<h3>AMM pools</h3><p class="muted">Pools against XRP, RLUSD and USDV (Valtorum USD) are read and added together for depth${t.liquidity ? ` — total ${usd(t.liquidity.totalUsd, 0)}${t.liquidity.quoteAssets.length ? ` via ${esc(t.liquidity.quoteAssets.join(' + '))}` : ''}` : ''}. RLUSD and USDV are valued at a nominal $1; the on-ledger price is TVL-weighted across live pools.</p><table><tr><th>Pair</th><th>AMM account</th><th>Reserves</th><th>TVL</th><th>Implied $/token</th><th>Fee</th></tr>${poolRows}</table>
-<h3>DEX order book (top of book, USD)</h3><table><tr><th>Pair</th><th>Best bid</th><th>Best ask</th><th>Spread</th></tr>${bookRows}</table>
-<h3>Top holders (excl. treasury)</h3><table><tr><th>Account</th><th>Balance</th><th>% of non-treasury</th></tr>${holderRows}</table>
-<h3>Notes</h3><ul>${t.notes.map(n => `<li>${esc(n)}</li>`).join('')}${t.website ? `<li>Issuer info: <a href="${esc(t.website)}" target="_blank" rel="noopener">${esc(t.website)}</a></li>` : ''}</ul>
+<div class="table-wrap"><table>${checks}</table></div></div></details>
+<details class="fold"><summary>Issuer control flags</summary><div class="fold-body"><div class="table-wrap"><table><tr><th>Flag</th><th>Value</th></tr>${flagRows}</table></div></div></details>
+<details class="fold"><summary>Pools, order book, and holders</summary><div class="fold-body">
+<h3>AMM pools</h3><p class="muted">Pools against XRP, RLUSD and USDV (Valtorum USD) are read and added together for depth${t.liquidity ? ` — total ${usd(t.liquidity.totalUsd, 0)}${t.liquidity.quoteAssets.length ? ` via ${esc(t.liquidity.quoteAssets.join(' + '))}` : ''}` : ''}. RLUSD and USDV are valued at a nominal $1; the on-ledger price is TVL-weighted across live pools.</p><div class="table-wrap"><table><tr><th>Pair</th><th>AMM account</th><th>Reserves</th><th>TVL</th><th>Implied $/token</th><th>Fee</th></tr>${poolRows}</table></div>
+<h3>DEX order book</h3><div class="table-wrap"><table><tr><th>Pair</th><th>Best bid</th><th>Best ask</th><th>Spread</th></tr>${bookRows}</table></div>
+<h3>Top holders, excluding treasury</h3><div class="table-wrap"><table><tr><th>Account</th><th>Balance</th><th>% of non-treasury</th></tr>${holderRows}</table></div>
+</div></details>
+<details class="fold"><summary>Notes</summary><div class="fold-body"><ul>${t.notes.map(n => `<li>${esc(n)}</li>`).join('')}${t.website ? `<li>Issuer info: <a href="${esc(t.website)}" target="_blank" rel="noopener">${esc(t.website)}</a></li>` : ''}</ul></div></details>
 ${t.errors.length ? `<h3>Fetch errors</h3><ul>${t.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
 <p class="muted">JSON: <a href="/api/tokens/${esc(t.id)}">/api/tokens/${esc(t.id)}</a> · More ${esc(METAL_NAME[t.metal] ?? t.metal)} tokens: <a href="/commodities/${esc(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)} on XRPL</a> · <a href="/methodology">How checks work</a></p>` });
 }
@@ -843,16 +866,13 @@ ${groups}
 function commodityPage(c: ClassPage) {
   const defs = classTokens(c);
   const live = (id: string) => snap?.tokens.find(x => x.id === id);
-  const rows = defs.map(d => {
+  const cards = defs.map(d => {
     const t = live(d.id);
-    const liq = t ? t.pools.reduce((s2, p) => s2 + (p.tvlUsd ?? 0), 0) : null;
-    if (!t) return `<tr><td><a href="/token/${esc(d.id)}"><b>${esc(d.name)}</b></a>${d.label ? `<span class="pill">${esc(d.label)}</span>` : ''}<div class="muted">${esc(d.project)}</div></td><td colspan="4" class="muted">loading</td></tr>`;
-    const p = viewOf(t);
-    return `<tr><td><a href="/token/${esc(d.id)}"><b>${esc(d.name)}</b></a>${d.label ? `<span class="pill">${esc(d.label)}</span>` : ''}<div class="muted">${esc(d.project)}</div><div class="muted">${fmt(t.supply.circulating)} ${esc(d.displayCode)} · ${t.pools.some(p2 => p2.exists) ? usd(liq, 0) + ' TVL' : 'no pool'} · clawback ${t.flags.allowTrustLineClawback ? 'on' : 'off'}</div></td>
-<td>${chips(p.categories.market.items)}</td><td>${chips(p.categories.controls.items)}</td><td>${chips(p.categories.identity.items)}</td><td>${legacyBit(t.status)}</td></tr>`;
+    if (!t) return `<article class="token-card"><h2><a href="/token/${esc(d.id)}">${esc(d.name)}</a></h2><p class="muted">Reading not loaded yet.</p></article>`;
+    return renderHomeCard(t, { href: `/commodities/${commodityMeta(d.metal).slug}`, name: commodityMeta(d.metal).title });
   }).join('');
   const tracked = defs.length
-    ? `<h2>${esc(cap(classLabel(c)))} tokens ReserveWatch tracks</h2>${header()}<p class="muted">Same comparison as the <a href="/">home page</a>. Legacy overall is the worst raw check, shown small. RLUSD and USDV are valued at a nominal $1.</p><div style="overflow-x:auto"><table><tr><th>Token</th><th>Market, liquidity and peg</th><th>Issuer controls</th><th>Identity</th><th>Legacy overall</th></tr>${rows}</table></div>`
+    ? `<h2>${esc(cap(classLabel(c)))} on the ledger</h2>${header()}<div class="board">${cards}</div>`
     : '';
   const related = (c.related ?? []).map(sl => CLASS_PAGES.find(x => x.slug === sl)).filter(Boolean).map(x => `<a href="/commodities/${x!.slug}">${esc(cap(classLabel(x!)))}</a>`).join(' · ');
   const meta = commodityMeta(c.codes[0]);
@@ -873,7 +893,7 @@ function commodityPage(c: ClassPage) {
         mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
         about: { '@type': 'Thing', name: meta.title } },
     ],
-    body: `<div class="legal" style="max-width:980px"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
+    body: `<div class="legal legal-wide"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
 <p class="notice"><b>Automated ledger readings, not advice.</b> ReserveWatch is not an audit, not proof of reserves and not investment advice. It does not tell anyone to buy, sell or hold a token.</p>
 <h2>What is a tokenized ${esc(c.noun ?? classLabel(c))} token?</h2><p>${c.what}</p>
 <h2>How price is compared</h2><p>${c.pricing}</p>
