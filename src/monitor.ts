@@ -285,6 +285,9 @@ export async function checkToken(t: TokenDef, xrpUsd: number | null, spotCache: 
   const topReal = holders.topHolders.find(h => h.label !== 'AMM pool');
   if (topReal && topReal.pct >= CONC_WARN_PCT) add('concentration', 'warn', `Top holder ${topReal.account} holds ${topReal.pct.toFixed(1)}% of non-treasury supply${holders.nonZero <= 1 ? ' (only holder)' : ''}.`);
 
+  // Legacy overall: the worst raw check. The public comparison menu does not use
+  // this aggregate — see presentation.ts. Do not retune these severities to recolor
+  // the site; alerts, /api/tokens status, and historical snapshots depend on them.
   const rank: Record<Severity, number> = { ok: 0, warn: 1, critical: 2 };
   const status = checks.reduce<Severity>((m, c) => (rank[c.severity] > rank[m] ? c.severity : m), 'ok');
 

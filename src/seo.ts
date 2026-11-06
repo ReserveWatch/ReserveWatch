@@ -4,6 +4,7 @@ import { TOKENS } from './config/tokens.js';
 import { SNAPSHOTS } from './content/snapshots.js';
 import { CLASS_PAGES } from './content/commodities.js';
 import { LEARN_GUIDES } from './content/learn.js';
+import { BRIEFS } from './content/briefs.js';
 
 export const SITE_URL = (process.env.SITE_URL || 'https://thereservewatch.com').replace(/\/+$/, '');
 export const SITE_NAME = 'ReserveWatch';
@@ -17,7 +18,7 @@ export const OG_IMAGE_PATH = '/og-share.png';
 export const OG_IMAGE_W = 1200;
 export const OG_IMAGE_H = 630;
 export const DEFAULT_DESCRIPTION =
-  'Independent, issuer-neutral monitor of commodity tokens on the XRP Ledger — gold, silver, platinum, energy, diamonds and more: supply, issuer flags, AMM liquidity, peg vs spot. Not investment advice.';
+  'Compare XRPL commodity tokens by issuer controls, liquidity, and public verification. Measured facts, issuer features, and information gaps are separate from active problems. Not a buy or sell rating.';
 
 const escAttr = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 export const abs = (p: string) => SITE_URL + (p.startsWith('/') ? p : '/' + p);
@@ -76,7 +77,7 @@ export const websiteLd = () => ({
 export const datasetLd = (updatedAt?: string) => ({
   '@context': 'https://schema.org', '@type': 'Dataset', '@id': SITE_URL + '/#dataset',
   name: 'XRPL commodity token on-ledger health readings',
-  description: 'Automated readings of public XRP Ledger data for commodity tokens (gold, silver, platinum, energy, diamonds and other classes as issuers appear): circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. Health labels (OK / WARN / CRITICAL) summarize rule-based checks; they are not audits, proof of reserves, credit ratings or investment advice.',
+  description: 'Automated readings of public XRP Ledger data for commodity tokens (gold, silver, platinum, energy, diamonds and other classes as issuers appear): circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
   keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
   creator: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
@@ -124,23 +125,24 @@ export function llmsTxt(): string {
 
 > ${TAGLINE}. ${DEFAULT_DESCRIPTION}
 
-${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity and publishes automated health labels (OK, WARN, CRITICAL). The same published rules apply to every issuer. "Unverified listing" and "Issuer link unconfirmed" are soft labels: a link could not be confirmed from the project's own sources. A label is not an allegation.
+${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity. The live pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
 
 ## What ${SITE_NAME} is not
 
 - Not a vault audit and not proof of reserves. On-ledger supply counts tokens. It does not show that a physical commodity exists.
-- Not investment, financial, legal, or tax advice. OK, WARN, and CRITICAL are not credit ratings, recommendations, or opinions on solvency.
+- Not investment, financial, legal, or tax advice. Comparison labels and the legacy OK, WARN, and CRITICAL overall are not credit ratings, recommendations, or opinions on solvency. Measured does not mean safe.
 - Not a custodian and not an issuer. ${SITE_NAME} does not hold funds, run wallets, or ask for seeds, private keys, or payments.
 - Not affiliated with Ripple, the XRPL Foundation, or any token issuer it lists.
 
 ## Key pages
 
-- [Home](${abs('/')}): live health readings for tracked tokens.
-- [Methodology](${abs('/methodology')}): how OK, WARN, and CRITICAL are set, including peg vs spot.
+- [Home](${abs('/')}): live comparison of issuer controls, liquidity, and public verification.
+- [Methodology](${abs('/methodology')}): how comparison labels differ from the legacy OK / WARN / CRITICAL overall, including peg vs spot.
 - [Learn](${abs('/learn')}): plain-language explainers.
 ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
 - [Commodities](${abs('/commodities')}): asset classes on the XRP Ledger, including classes with no public issuer tracked yet.
 - [Weekly snapshots](${abs('/snapshots')}): frozen weekly copies of the automated checks. Each week: ${abs('/snapshots')}/{YYYY-MM-DD}.
+- [Briefs](${abs('/briefs')}): short dated notes when a new commodity issuer appears or a CRITICAL / soft-label situation is worth documenting. Each brief: ${abs('/briefs')}/{slug}.
 - [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
 - [Independence](${abs('/independent')}): not a custodian, issuer, vault auditor, or investment advice.
 - [Dataset JSON API](${abs('/api/tokens')}): free JSON readings (application/json). Free to cite.
@@ -163,21 +165,23 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },
     ...CLASS_PAGES.map(c => ({ loc: abs(`/commodities/${c.slug}`), lastmod: legalDate, changefreq: 'weekly', priority: '0.7' })),
-    { loc: abs('/methodology'), lastmod: legalDate, changefreq: 'monthly', priority: '0.6' },
-    { loc: abs('/about'), lastmod: legalDate, changefreq: 'monthly', priority: '0.5' },
-    { loc: abs('/independent'), lastmod: legalDate, changefreq: 'monthly', priority: '0.5' },
+    { loc: abs('/methodology'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
+    { loc: abs('/about'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },
+    { loc: abs('/independent'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },
     { loc: abs('/alerts'), lastmod: liveDate, changefreq: 'daily', priority: '0.5' },
     { loc: abs('/snapshots'), lastmod: SNAPSHOTS[0]?.week ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...SNAPSHOTS.map(s => ({ loc: abs(`/snapshots/${s.week}`), lastmod: s.week, changefreq: 'yearly', priority: '0.5' })),
+    { loc: abs('/briefs'), lastmod: BRIEFS[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.6' },
+    ...BRIEFS.map(b => ({ loc: abs(`/briefs/${b.slug}`), lastmod: b.date, changefreq: 'yearly', priority: '0.5' })),
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },
-    { loc: abs('/learn/clawback-freeze-trust-lines'), lastmod: legalDate, changefreq: 'monthly', priority: '0.6' },
+    { loc: abs('/learn/clawback-freeze-trust-lines'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
     ...LEARN_GUIDES.map(g => ({ loc: abs(`/learn/${g.slug}`), lastmod: g.dateModified, changefreq: 'monthly', priority: '0.6' })),
-    { loc: abs('/faq'), lastmod: '2026-11-05', changefreq: 'monthly', priority: '0.6' },
+    { loc: abs('/faq'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/privacy'), lastmod: legalDate, changefreq: 'monthly', priority: '0.4' },
-    { loc: abs('/disclaimer'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
+    { loc: abs('/disclaimer'), lastmod: '2026-11-06', changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/terms'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/contact'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
-    { loc: abs('/llms.txt'), lastmod: legalDate, changefreq: 'monthly', priority: '0.3' },
+    { loc: abs('/llms.txt'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.3' },
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

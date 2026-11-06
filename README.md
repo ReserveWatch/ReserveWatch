@@ -39,7 +39,7 @@ Optional: `cp .env.example .env` and edit. **No API keys are required.**
 
 ## Routes
 
-- `/` — token list: health (ok/warn/critical), circulating supply, spot/token, on-ledger price & deviation, AMM TVL, issues, last updated
+- `/` — comparison menu: market/liquidity/peg, issuer controls, and identity/verification. The legacy overall (worst raw check: ok/warn/critical) is shown second. `presentation` on `/api/tokens` is that comparison; `status` and `checks` are unchanged.
 - `/token/:id` — public transparency page (issuer, currency code, supply, flags, AMM pools, DEX top of book, top holders, checks, notes)
 - `/alerts` — alert log (status transitions)
 - `/api/tokens`, `/api/tokens/:id` — JSON; `/healthz`; `POST /api/refresh`
@@ -56,18 +56,22 @@ Token ids: `meld-gld`, `meld-slv`, `unlisted-gold-rmeld` ("Unverified listing" �
 | Issuer flags (globalFreeze, noFreeze, allowTrustLineClawback, requireAuthorization, disableMasterKey…) , TransferRate, Domain | `account_info` |
 | Outstanding supply; treasury/pre-issuance excluded | `gateway_balances` with `hotwallet` = configured treasury wallets |
 | Holders, frozen / deep-frozen trust lines, top-holder concentration | `account_lines` on issuer (paged) |
-| AMM depth vs XRP and RLUSD, implied price, fee | `amm_info` |
-| DEX top of book vs XRP and RLUSD | `book_offers` |
+| AMM depth vs XRP, RLUSD and USDV, implied price, fee | `amm_info` |
+| DEX top of book vs XRP, RLUSD and USDV | `book_offers` |
 | XRP/USD | on-ledger XRP/RLUSD AMM (no external API) |
 | Spot gold/silver/platinum | gold-api.com (USD/oz, XAU/XAG/XPT) → per token via grams-per-token |
 
-Peg = deepest AMM implied price (or DEX mid if no AMM and spread ≤ `MAX_DEX_SPREAD_PCT`) vs spot. A peg reading is
-only treated as **reliable** when it comes from an AMM with TVL ≥ `LOW_LIQUIDITY_USD`. Otherwise the UI shows
-"thin liquidity — not a peg reading" instead of a headline % (the raw figure is kept in JSON and on the detail page),
-and the check is "Peg not measurable" (warn), never critical. Unfunded DEX offers are ignored.
+Peg = TVL-weighted AMM implied price across XRP, RLUSD and USDV pools (RLUSD and USDV at a nominal $1; not a reserve check), or DEX mid if no AMM and spread ≤ `MAX_DEX_SPREAD_PCT`. A peg reading is
+**reliable** only from an AMM with TVL ≥ `LOW_LIQUIDITY_USD`. Otherwise the comparison says "peg not measurable" (a gap, not a broken peg). The raw check is still warn, never critical, and the raw figure stays in JSON.
 
-Health: **critical** = issuer discontinued, issuer could not be matched to the project its Domain references (`knownStatus: 'unverified'`, shown with an "Unverified listing" label), Global Freeze, >50% of supply frozen, issuer missing, or peg breach on a liquid pool.
-**warn** = unverified on-ledger Domain claim, clawback enabled, no/thin AMM, unverifiable peg, frozen lines, high concentration, transfer fee >1%.
+**Comparison** (`src/presentation.ts`, model `categories-v1`) is what the pages lead with. It does not rewrite check severities.
+
+- **Measured** — liquidity at/above the gate, a reliable price within `PEG_WARN_PCT`, or two-way `xrp-ledger.toml`. Not a safety rating and not proof of backing.
+- **Feature** — clawback, RequireAuth, concentration, retained freeze ability. Empty frozen lines are Noted, not a caution. Not risk-free.
+- **Not measurable / not confirmed** — no pool, thin pool, no spot reference, unpublished issuer link, missing domain file. No pool is not a broken peg. Not confirmed is not a fraud finding.
+- **Caution / Critical** — Global Freeze, discontinued, issuer missing, material or majority freezes, a *reliable* peg at/beyond the warn or crit band, or issuer records that disagree with the account (`knownStatus: 'unverified'`).
+
+**Legacy overall** (`status`) is still the worst raw check. One feature or gap still makes it WARN. Alerts and weekly snapshots follow that aggregate and are not relabeled.
 
 ## Adding a token
 Edit `src/config/tokens.ts` (issuer, currency code — 3-char or 40-hex, grams per token, metal, treasury wallets, notes).
@@ -77,7 +81,8 @@ Edit `src/config/tokens.ts` (issuer, currency code — 3-char or 40-hex, grams p
 src/config/tokens.ts  token registry (verified live Oct 27–28, 2026)
 src/xrplClient.ts     xrpl.js client with endpoint failover
 src/spot.ts           spot metal price (pluggable / static override)
-src/monitor.ts        metrics + health rules
+src/monitor.ts        metrics + legacy raw-check rules (status = worst check)
+src/presentation.ts  comparison categories (does not rewrite status or checks)
 src/alerts.ts         file-based alerts (data/alerts.log JSONL) + Telegram/email stubs
 src/server.ts         Express SSR UI + JSON API + poller
 src/check.ts          one-shot CLI
