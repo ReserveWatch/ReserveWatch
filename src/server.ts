@@ -76,11 +76,12 @@ body{font-family:var(--sans);font-size:17px;line-height:1.5;margin:0;background:
 .skip:focus{top:12px}
 header{background:#fff;border-bottom:1px solid var(--rw-border)}
 header .wrap,main,footer .wrap{max-width:2200px;margin:auto;padding-left:40px;padding-right:40px}
-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:20px 28px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px 36px;padding-top:14px;padding-bottom:14px;flex-wrap:wrap}
 header a{color:var(--rw-navy);text-decoration:none}
-header .brand img{height:64px;width:auto;display:block}
-header nav{display:flex;flex-wrap:wrap;gap:8px 18px}
-header nav a{font-size:0.95rem;font-weight:650}
+header .brand{flex:0 0 auto;max-width:100%;line-height:0}
+header .brand img{height:96px;width:auto;max-width:100%;display:block}
+header nav{display:flex;flex:1 1 280px;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:10px 22px;min-width:0}
+header nav a{font-size:1rem;font-weight:650}
 header nav a:hover{color:var(--rw-gold-ink)}
 main{padding-top:36px;padding-bottom:64px}
 h1,h2,.token-card h2{font-family:var(--serif);font-weight:500;letter-spacing:-0.02em;color:var(--rw-navy)}
@@ -174,7 +175,10 @@ footer nav a{font-weight:650;text-decoration:none}
 .fail{color:var(--rw-critical)}
 @media(max-width:720px){
 header .wrap,main,footer .wrap{padding-left:16px;padding-right:16px}
-header .brand img{height:52px;width:auto}
+header .wrap{flex-direction:column;align-items:stretch;gap:12px;padding-top:12px;padding-bottom:12px}
+header .brand{width:100%}
+header .brand img{height:auto;width:100%;max-width:441px}
+header nav{flex:0 1 auto;align-content:flex-start;justify-content:flex-start;width:100%}
 main{padding-top:24px}
 .card-top{flex-direction:column}
 .supply{text-align:left}

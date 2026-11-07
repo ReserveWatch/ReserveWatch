@@ -26,6 +26,14 @@ test('token detail does not split market, controls, and identity into three equa
   assert.match(css, /\.panels>\.panel:first-child\{grid-column:1 \/ -1\}/);
 });
 
+test('the header logo is the original 96px lockup, and the phone size cannot overflow the screen', () => {
+  assert.match(css, /header \.brand img\{height:96px;width:auto;max-width:100%;display:block\}/);
+  assert.equal(css.includes('height:64px'), false);
+  assert.equal(css.includes('height:52px'), false);
+  assert.match(css, /@media\(max-width:720px\)\{[\s\S]*header \.brand img\{height:auto;width:100%;max-width:441px\}/);
+  assert.match(css, /header nav\{display:flex;flex:1 1 280px;flex-wrap:wrap;/);
+});
+
 test('a phone width stays a single column inside the side padding', () => {
   assert.match(css, /@media\(max-width:720px\)\{[^}]*padding-left:16px;padding-right:16px/);
   const inner = 390 - 32;
