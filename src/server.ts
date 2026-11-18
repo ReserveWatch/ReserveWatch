@@ -14,6 +14,7 @@ import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './co
 import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
 import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
 import { renderDetailLead, renderHomeCard } from './face.js';
+import { industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -55,8 +56,46 @@ async function refresh() {
     fs.writeFileSync(path.join(DATA_DIR, 'latest.json'), JSON.stringify(s, null, 2));
     await processAlerts(s);
     console.log(`[monitor] snapshot ok: ${s.tokens.map(t => `${t.id}=${t.status}`).join(' ')} (${s.durationMs}ms)`);
+    void attachVolume(false);
   } catch (e) { lastError = (e as Error).message; console.error('[monitor] snapshot failed', e); }
   finally { running = false; }
+}
+
+let volumeBusy = false;
+let volumeAt = 0;
+const VOLUME_TTL_MS = 20 * 60 * 1000;
+const volumeWeeksPath = () => path.join(DATA_DIR, 'volume-weeks.json');
+function readVolumeWeeks(): VolumeWeek[] {
+  try { const rows = JSON.parse(fs.readFileSync(volumeWeeksPath(), 'utf8')); return Array.isArray(rows) ? rows : []; } catch { return []; }
+}
+/** Rolling 7-day volume. Cached so the 5-minute ledger poll does not re-read every exchange list. */
+async function attachVolume(force: boolean) {
+  if (!snap || volumeBusy) return;
+  if (!force && Date.now() - volumeAt < VOLUME_TTL_MS && snap.marketActivity) return;
+  const target = snap;
+  volumeBusy = true;
+  try {
+    const { byId } = await loadActivities(target.tokens.map(t => ({ id: t.id, currency: t.currency, issuer: t.issuer, displayCode: t.displayCode })));
+    if (snap !== target) return;
+    const rows = snap.tokens.map(t => {
+      t.activity = byId[t.id] ?? unknownActivity(t.displayCode, 'No volume reading for this token.');
+      return { currency: t.currency, activity: t.activity };
+    });
+    const asOf = new Date().toISOString();
+    let trend = readVolumeWeeks();
+    const draft = industryTotal(rows, trend, asOf);
+    if (draft.usdTotal != null && draft.tokensUnknown === 0 && draft.tokensUnpriced === 0) {
+      trend = rememberWeek(trend, { week: isoWeek(new Date()), asOf, usdTotal: draft.usdTotal, complete: true });
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(volumeWeeksPath(), JSON.stringify(trend, null, 2));
+    }
+    snap.marketActivity = { ...industryTotal(rows, trend, asOf) };
+    volumeAt = Date.now();
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, 'latest.json'), JSON.stringify(snap, null, 2));
+    console.log(`[volume] ${snap.marketActivity.usdTotal == null ? 'not measured' : '$' + Math.round(snap.marketActivity.usdTotal)} over ${snap.marketActivity.tokensPriced} priced tokens`);
+  } catch (e) { console.error('[volume] failed', e); }
+  finally { volumeBusy = false; }
 }
 
 // ---------- HTML helpers ----------
@@ -173,6 +212,13 @@ footer nav a{font-weight:650;text-decoration:none}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px 18px}
 .kv b{display:block;color:var(--rw-gold-ink);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:750;margin-bottom:3px}
 .fail{color:var(--rw-critical)}
+.activity{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 28px;margin:4px 0 22px}
+.activity h2{font-family:var(--sans);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--rw-gold-ink);margin:0;width:100%;font-weight:750}
+.activity-total{margin:0;font-family:var(--serif);font-size:clamp(1.8rem,3vw,2.4rem);line-height:1.05;color:var(--rw-navy);font-weight:500}
+.activity-total span,.chg{display:block;font-family:var(--sans);font-size:.95rem;color:var(--rw-muted);font-weight:450;margin-top:4px}
+.volume{margin:8px 0 0;font-size:.98rem;color:var(--rw-navy)}
+.spark{display:block}
+.spark rect{fill:var(--rw-navy)}
 @media(max-width:720px){
 header .wrap,main,footer .wrap{padding-left:16px;padding-right:16px}
 header .wrap{flex-direction:column;align-items:stretch;gap:12px;padding-top:12px;padding-bottom:12px}
@@ -222,6 +268,28 @@ function viewOf(t: TokenReport) {
   return presentFromReport(t);
 }
 
+function marketActivityHtml(): string {
+  const m = snap?.marketActivity;
+  if (!m || m.usdTotal == null) return `<section class="activity" aria-label="Market activity"><h2>Market activity</h2><p class="volume">7-day volume not measured.</p></section>`;
+  const change = m.direction === 'down' && m.changePct != null ? `Down ${pctLabel(m.changePct)}% vs the prior 7 days`
+    : m.direction === 'up' && m.changePct != null ? `Up ${pctLabel(m.changePct)}% vs the prior 7 days`
+    : m.direction === 'flat' ? 'About the same as the prior 7 days'
+    : m.direction === 'up' ? 'Up from no measured trades in the prior 7 days'
+    : 'Change vs the prior 7 days not measured';
+  const bars = m.trend.filter(p => p.complete && p.usdTotal != null);
+  const max = Math.max(...bars.map(b => b.usdTotal ?? 0), 1);
+  const spark = bars.length > 1 ? `<svg class="spark" role="img" aria-label="${esc(bars.map(b => `${b.week} ${usd(b.usdTotal, 0)}`).join(', '))}" viewBox="0 0 ${bars.length * 14} 36" width="${bars.length * 14}" height="36">${bars.map((b, i) => {
+    const h = Math.max(2, Math.round(((b.usdTotal ?? 0) / max) * 32));
+    return `<rect x="${i * 14 + 2}" y="${34 - h}" width="8" height="${h}" rx="1"></rect>`;
+  }).join('')}</svg>` : '';
+  const extra = [
+    m.tokensUnknown ? `${m.tokensUnknown} not measured` : '',
+    m.tokensUnpriced ? `${m.tokensUnpriced} traded with no USD price` : '',
+    m.changeExcluded ? `${m.changeExcluded} left out of the comparison` : '',
+  ].filter(Boolean).join(' · ');
+  return `<section class="activity" aria-label="Market activity"><div><h2>Market activity</h2><p class="activity-total">${usd(m.usdTotal, 0)} <span>rolling 7-day volume${extra ? ` · ${esc(extra)}` : ''}</span></p><p class="chg">${esc(change)}</p></div>${spark}<details class="fold"><summary>How volume is measured</summary><div class="fold-body"><p>${esc(m.method)}</p><p>${esc(m.historyNote)}</p></div></details></section>`;
+}
+
 function listPage() {
   const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
   return page({
@@ -246,6 +314,7 @@ ${header()}
 <p>RLUSD and USDV are valued at a nominal $1. That is the issuer-stated peg, not a reserve check. USDV is not graded as a commodity.</p>
 </div></details></div>
 ${classStrip()}
+${marketActivityHtml()}
 <div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>
 <p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>` });
 }
@@ -447,6 +516,9 @@ const METHODOLOGY = () => `
 
 <h2>Where the data comes from and how often</h2>
 <p>All ledger data comes from public XRPL mainnet servers (account info, gateway balances, trust lines, AMM info and order books). We refresh about every ${Math.round(POLL_SEC / 60)} minutes. When a token's label changes, the change and its reasons are saved in the <a href="/alerts">alert log</a>. The raw readings are free as JSON at <a href="/api/tokens">/api/tokens</a>. Data can be late, missing or wrong if a server or the price API has problems.</p>
+
+<h2>Trading volume</h2>
+<p>A separate reading, not a health label. For each tracked commodity token, ReserveWatch counts DEX fills and AMM swaps against XRP, RLUSD, and USDV over the last 7 days and the 7 days before that. The count comes from XRPL Meta's exchange list, which is indexed from public ledger history. Dollars are each fill's token amount times its indexed USD price. RLUSD and USDV are the quote side, at a nominal $1, and are not added as commodity tokens. If the list is cut off inside the window, the total is <b>not measured</b> rather than shown as zero. A complete list with no fills is a measured zero, and that is not a warning. Weekly snapshots saved before this reading do not contain volume, and those weeks were not reconstructed.</p>
 
 <h2>What this is not</h2>
 <ul>
@@ -671,7 +743,7 @@ ${why.length ? `<p style="margin:8px 0 0"><b>Why:</b></p><ul>${why.map(c => `<li
     ],
     body: `<div class="legal" style="max-width:980px"><h1>${esc(title)}</h1>
 <p class="muted">ISO week ${esc(s.isoWeek)} · readings captured ${esc(s.capturedAt)} (${esc(etTime(s.capturedAt))}) · XRPL ledger ~${esc(s.ledgerIndex)} · XRP/USD ${usd(s.xrpUsd, 4)}</p>
-<p class="notice"><b>Automated readings, not advice.</b> This page is a frozen copy of the <b>legacy worst-check labels</b> (OK / WARN / CRITICAL) as saved on this date. Those words are not rewritten to the live comparison menu. A WARN here may be only an issuer control or a missing measurement. Live pages separate those from active problems. It is not investment advice, not an audit, and not proof of reserves. See each token page for the current comparison, and the <a href="/methodology">methodology</a> for both models.</p>
+<p class="notice"><b>Automated readings, not advice.</b> This page is a frozen copy of the <b>legacy worst-check labels</b> (OK / WARN / CRITICAL) as saved on this date. Those words are not rewritten to the live comparison menu. A WARN here may be only an issuer control or a missing measurement. Trading volume was not recorded in this copy; the newest exchange page cannot be paged back to this week, so the number was not reconstructed. Live volume is on the <a href="/">home page</a>. It is not investment advice, not an audit, and not proof of reserves. See each token page for the current comparison, and the <a href="/methodology">methodology</a> for both models.</p>
 ${s.notes?.length ? `<h2>Context for this snapshot</h2><ul>${s.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
 <h2>At a glance</h2>
 <p>We tracked <b>${s.tokens.length}</b> commodity tokens: <b>${count('critical')}</b> ${badge('critical')}, <b>${count('warn')}</b> ${badge('warn')}, <b>${count('ok')}</b> ${badge('ok')}.</p>
@@ -982,7 +1054,7 @@ ${rows}
 }
 
 // ---------- FAQ (/faq) ----------
-const FAQ_UPDATED = 'November 6, 2026';
+const FAQ_UPDATED = 'November 18, 2026';
 /** Plain-text answers only. Links live in `more` so FAQPage JSON-LD stays free of HTML. */
 const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
   {
@@ -1014,6 +1086,11 @@ const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
     q: 'Why is peg vs spot sometimes "not measurable" when liquidity is thin?',
     a: `For gold, silver, platinum and palladium, ${SITE_NAME} compares the spot price of the metal a token says it represents with the price the token trades at on the XRP Ledger. The gap is the peg deviation. A small pool can sit far from spot simply because nobody has traded it back into line. That is a liquidity fact, not a broken peg, and not a sign the metal is missing. ${SITE_NAME} grades the gap only when the price comes from AMM pools holding at least about $${n0(LOW_LIQ_USD)}. Under ${PEG_WARN_PCT}% the comparison says price near spot (measured, not a safety rating). From ${PEG_WARN_PCT}% up to ${PEG_CRIT_PCT}% is Caution. ${PEG_CRIT_PCT}% or more is Critical. Below that gate, or when there is no usable pool, the comparison says peg not measurable, and the raw check is still WARN. The raw number is kept and marked not graded. A DEX order-book price is never graded as reliable, because its depth is not measured. Oil, natural gas, electricity, uranium, copper, diamonds, timber and crops have no single public spot price that maps onto a token, so those classes show "price vs spot not measured" instead of a guess. RLUSD and USDV pools are valued at a nominal $1, which is the issuer-stated peg and not a reserve check. A peg reading describes trading prices only. It is not proof that a commodity exists in a vault, and it is not a signal to buy or sell.`,
     more: '<a href="/learn/peg-vs-spot">Peg vs spot</a> · <a href="/methodology#peg">How peg is measured</a>',
+  },
+  {
+    q: 'How is trading volume measured?',
+    a: `For each tracked commodity token, ${SITE_NAME} counts XRP Ledger DEX fills and AMM swaps against XRP, RLUSD, and USDV over a rolling 7 days, and compares that with the prior 7 days. The fills come from XRPL Meta's exchange list, indexed from public ledger history. Dollars are each fill's token amount times its indexed USD price. RLUSD and USDV are quote assets at a nominal $1, not commodity tokens, so their own volume is not part of the total. If the list is cut off, the total is not measured rather than shown as zero. A measured zero is a week with no fills, and it is not a warning. The figure is trading activity only. It is not proof of reserves, not an audit, and not a signal to buy or sell. Snapshots saved before this reading do not include volume.`,
+    more: '<a href="/methodology">Methodology</a> · <a href="/">Market activity</a>',
   },
   {
     q: 'How should I cite /api/tokens?',
@@ -1168,6 +1245,7 @@ app.post('/api/refresh', async (q, r) => {
 
 app.listen(PORT, () => {
   console.log(`[server] http://localhost:${PORT}  (poll every ${POLL_SEC}s)`);
+  void attachVolume(true);
   refresh();
   setInterval(refresh, POLL_SEC * 1000);
 });

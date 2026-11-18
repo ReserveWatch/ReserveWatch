@@ -5,6 +5,7 @@
 // must place outside any <details> element.
 
 import type { TokenReport } from './monitor.js';
+import { activityPlain } from './volume.js';
 import {
   itemsOf, presentFromReport, DEFAULT_THRESHOLDS,
   type PresentItem, type PresentTone, type Thresholds,
@@ -132,6 +133,11 @@ function banner(items: PresentItem[]): string {
   return `<div class="alert-banner${crit ? '' : ' caution'}" role="note">${hot.map(i => `<p><span class="banner-k">${i.tone === 'critical' ? 'Critical' : 'Caution'}</span> ${esc(i.detail)}</p>`).join('')}</div>`;
 }
 
+function volumeHtml(t: TokenReport): string {
+  if (!t.activity) return '';
+  return `<p class="volume">${esc(activityPlain(t.activity))}</p>`;
+}
+
 function readings(items: PresentItem[], facts: FaceFacts, figures: string): string {
   const body = items.map(i => `<p><b>${esc(visibleLabel(i, facts))}.</b> ${esc(i.detail)}</p>`).join('') + `<p>${esc(figures)}</p>`;
   return `<details class="fold"><summary>Readings</summary><div class="fold-body">${body}</div></details>`;
@@ -150,7 +156,7 @@ export function renderHomeCard(t: TokenReport, nav: CardNav, thresholds: Thresho
 <header class="card-top"><div><h2><a href="/token/${esc(t.id)}">${esc(t.name)}</a>${pill}</h2><p class="card-sub">${esc(t.project)} · <a href="${esc(nav.href)}">${esc(nav.name)}</a></p></div><p class="supply"><b>${esc(t.supply.circulating == null ? '—' : Math.round(t.supply.circulating).toLocaleString('en-US'))}</b><span>${esc(t.displayCode)}</span></p></header>
 ${banner(items)}
 <div class="groups">
-<section class="group"><h3>Market</h3><p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${liquidityMeter(facts)}${pegMeter(facts)}</section>
+<section class="group"><h3>Market</h3><p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${volumeHtml(t)}${liquidityMeter(facts)}${pegMeter(facts)}</section>
 <section class="group"><h3>Controls</h3><div class="facts">${controls.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div>${concentrationMeter(controls, facts)}</section>
 <section class="group"><h3>Identity</h3><div class="facts">${identity.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div></section>
 </div>
@@ -165,7 +171,7 @@ export function renderDetailLead(t: TokenReport, thresholds: Thresholds = DEFAUL
   const items = itemsOf(view);
   const block = (title: string, inner: string, groupItems: PresentItem[]) => `<section class="panel"><h2>${title}</h2>${inner}<details class="fold"><summary>Explanation</summary><div class="fold-body">${groupItems.map(i => `<p><b>${esc(visibleLabel(i, facts))}.</b> ${esc(i.detail)}</p>`).join('') || '<p>Nothing classified.</p>'}</div></details></section>`;
   return `${banner(items)}<div class="panels">
-${block('Market', `<p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${liquidityMeter(facts)}${pegMeter(facts)}`, view.categories.market.items)}
+${block('Market', `<p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${volumeHtml(t)}${liquidityMeter(facts)}${pegMeter(facts)}`, view.categories.market.items)}
 ${block('Controls', `<div class="facts">${view.categories.controls.items.map(i => chip(i, facts)).join('')}</div>${concentrationMeter(view.categories.controls.items, facts)}`, view.categories.controls.items)}
 ${block('Identity', `<div class="facts">${view.categories.identity.items.map(i => chip(i, facts)).join('')}</div>`, view.categories.identity.items)}
 </div><p class="meter-cap">${esc(view.marketFigures)}</p>`;
