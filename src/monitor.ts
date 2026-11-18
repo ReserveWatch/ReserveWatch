@@ -1,4 +1,5 @@
 import { dropsToXrp } from 'xrpl';
+import type { IndustryActivity, TokenActivity } from './volume.js';
 import { req, isTransient } from './xrplClient.js';
 import { getSpot, type SpotQuote } from './spot.js';
 import { TOKENS, RLUSD, USDV, QUOTE_ASSETS, type QuoteAsset, GRAMS_PER_TROY_OZ, commodityMeta, type TokenDef, type Commodity } from './config/tokens.js';
@@ -42,9 +43,15 @@ export interface TokenReport {
   status: Severity;
   updatedAt: string;
   errors: string[];
+  /** Rolling 7-day trading activity. Absent until a volume pass has run. Not part of the health score. */
+  activity?: TokenActivity;
 }
 
-export interface Snapshot { updatedAt: string; xrpUsd: number | null; xrpUsdSource: string; tokens: TokenReport[]; durationMs: number }
+export interface Snapshot {
+  updatedAt: string; xrpUsd: number | null; xrpUsdSource: string; tokens: TokenReport[]; durationMs: number;
+  /** Industry total for the same volume pass. Additive; older clients ignore it. */
+  marketActivity?: IndustryActivity;
+}
 
 export const LOW_LIQ_USD = Number(process.env.LOW_LIQUIDITY_USD || 10000);
 export const PEG_WARN_PCT = Number(process.env.PEG_WARN_PCT || 3);
