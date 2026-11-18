@@ -11,10 +11,12 @@ import { CLASS_PAGES, GROUPS, type ClassPage } from './content/commodities.js';
 import { SNAPSHOTS, type WeeklySnapshot, type SnapToken } from './content/snapshots.js';
 import { BRIEFS, HOW_TO_ADD, type Brief } from './content/briefs.js';
 import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './content/learn.js';
-import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
+import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, tokenThingLd, snapshotsDatasetLd, classPublicPath, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
 import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
 import { renderDetailLead, renderHomeCard } from './face.js';
-import { industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
+import { activityPlain, industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
+import { stateAnswer, summarizeState, type StateToken } from './state.js';
+import { badgeEmbed, badgeSvg } from './badge.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -220,6 +222,8 @@ footer nav a{font-weight:650;text-decoration:none}
 .activity-total{margin:0;font-family:var(--serif);font-size:clamp(1.8rem,3vw,2.4rem);line-height:1.05;color:var(--rw-navy);font-weight:500}
 .activity-total span,.chg{display:block;font-family:var(--sans);font-size:.95rem;color:var(--rw-muted);font-weight:450;margin-top:4px}
 .volume{margin:8px 0 0;font-size:.98rem;color:var(--rw-navy)}
+.answer{margin:0 0 14px;max-width:46rem;font-size:1.05rem;line-height:1.45;color:var(--rw-navy)}
+.cite{margin:14px 0 0;font-size:.82rem;color:var(--rw-muted)}
 .spark{display:block}
 .spark rect{fill:var(--rw-navy)}
 @media(max-width:720px){
@@ -247,7 +251,7 @@ ${o.refresh ? '<meta http-equiv="refresh" content="60">' : ''}${seoHead(o)}<meta
 <a class="skip" href="#content">Skip to content</a>
 <header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
 <p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Ledger: ${esc(endpointList()[0])}.</p></div></footer></body></html>`;
 
@@ -301,6 +305,7 @@ function listPage() {
     jsonLd: [orgLd(CONTACT_EMAIL), websiteLd(), datasetLd(snap?.updatedAt)],
     body: `<div class="mast"><h1>Compare XRPL commodity tokens</h1>
 <p class="lede">Issuer controls, liquidity, and public verification. Public ledger readings, not a buy or sell list.</p>
+${homeAnswer()}
 ${header()}
 <ul class="legend-row">
 <li><i class="swatch tone-measured" aria-hidden="true"></i> Measured <span>a reading, not a safety rating</span></li>
@@ -327,8 +332,26 @@ const METAL_NAME: Record<string, string> = Object.fromEntries(Object.entries(COM
 const trackedClasses = () => Object.keys(COMMODITY_META).filter(c => TOKENS.some(t => t.metal === c));
 const trackedClassList = () => { const n = trackedClasses().map(c => commodityMeta(c).name); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n.join(''); };
 function classStrip(): string {
-  const links = CLASS_PAGES.filter(p => classTokens(p).length).map(p => `<a href="/commodities/${p.slug}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join('') + '<a href="/commodities">All classes</a>';
+  const links = CLASS_PAGES.filter(p => classTokens(p).length).map(p => `<a href="${classHref(p.slug)}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join('') + '<a href="/commodities">All classes</a>';
   return `<nav class="commodities" aria-label="Commodities">${links}</nav>`;
+}
+function readingDay(): string { return (snap?.updatedAt ?? new Date().toISOString()).slice(0, 10); }
+function citeLine(path: string, iso?: string): string {
+  const day = (iso || new Date().toISOString()).slice(0, 10);
+  return `<p class="cite">Cite as: ReserveWatch, ${esc(day)}, ${esc(SITE_URL + path)}</p>`;
+}
+function stateRows(): StateToken[] {
+  return (snap?.tokens ?? []).map(t => ({
+    id: t.id, name: t.name, issuer: t.issuer, status: t.status,
+    depthUsd: t.liquidity ? t.liquidity.totalUsd : null,
+    volumeUsd: t.activity?.measured && t.activity.usdPriced ? t.activity.recent.usdVolume : null,
+    volumeMeasured: !!(t.activity?.measured && t.activity.usdPriced && t.activity.recent.complete),
+  }));
+}
+function homeAnswer(): string {
+  if (!snap) return '';
+  const summary = summarizeState(stateRows(), snap.updatedAt, snap.marketActivity);
+  return `<p class="answer">${esc(stateAnswer(summary))}</p>${citeLine('/', snap.updatedAt)}`;
 }
 type TokenMeta = { id: string; name: string; displayCode: string; metal: string };
 const tokenTitle = (t: TokenMeta) => `${t.name}${t.name.includes(t.displayCode) ? '' : ` (${t.displayCode})`} on XRPL — controls, liquidity, verification · ReserveWatch`;
@@ -346,9 +369,21 @@ function tokenPage(t: TokenReport) {
   const checks = t.checks.map(c => `<tr><td>${badge(c.severity)}</td><td>${esc(c.key)}</td><td>${esc(c.message)}</td></tr>`).join('');
   return page({
     title: tokenTitle(t), description: tokenDescription(t), path: `/token/${t.id}`, refresh: true,
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }, { name: commodityMeta(t.metal).title, path: `/commodities/${commodityMeta(t.metal).slug}` }, { name: t.name, path: `/token/${t.id}` }])],
-    body: `<p class="crumb"><a href="/commodities/${esc(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)}</a></p>
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }, { name: commodityMeta(t.metal).title, path: classHref(commodityMeta(t.metal).slug) }, { name: t.name, path: `/token/${t.id}` }]),
+      tokenThingLd({
+        id: t.id, name: t.name, description: tokenDescription(t),
+        properties: [
+          { name: 'Circulating supply', value: t.supply.circulating == null ? '' : String(t.supply.circulating) },
+          { name: 'Holders', value: String(t.holders.nonZero) },
+          { name: '7-day volume', value: t.activity ? activityPlain(t.activity) : '' },
+          { name: 'Legacy worst check', value: `${t.status}. The worst raw check. Not a credit rating or a buy or sell signal.` },
+        ],
+      }),
+    ],
+    body: `<p class="crumb"><a href="${classHref(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)}</a></p>
 <h1>${esc(t.name)}${labelPill(t)}</h1>
+<p class="answer">As of ${esc(readingDay())}, ${esc(t.name)} has ${fmt(t.supply.circulating, 0)} ${esc(t.displayCode)} circulating across ${fmt(t.holders.nonZero, 0)} holders. ${esc(t.activity ? activityPlain(t.activity) : '7-day volume not measured')}. The legacy worst check is ${esc(t.status.toUpperCase())}, which is not a buy or sell rating.</p>
 <p class="asof">${fmt(t.supply.circulating, 0)} ${esc(t.displayCode)} circulating · ${fmt(t.holders.nonZero, 0)} holders · Legacy <span class="legacy-mark legacy-${t.status}">${t.status.toUpperCase()}</span> · <a href="/methodology">how labels differ</a></p>
 ${header()}
 ${renderDetailLead(t)}
@@ -381,7 +416,9 @@ ${renderDetailLead(t)}
 </div></details>
 <details class="fold"><summary>Notes</summary><div class="fold-body"><ul>${t.notes.map(n => `<li>${esc(n)}</li>`).join('')}${t.website ? `<li>Issuer info: <a href="${esc(t.website)}" target="_blank" rel="noopener">${esc(t.website)}</a></li>` : ''}</ul></div></details>
 ${t.errors.length ? `<h3>Fetch errors</h3><ul>${t.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
-<p class="muted">JSON: <a href="/api/tokens/${esc(t.id)}">/api/tokens/${esc(t.id)}</a> · More ${esc(METAL_NAME[t.metal] ?? t.metal)} tokens: <a href="/commodities/${esc(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)} on XRPL</a> · <a href="/methodology">How checks work</a></p>` });
+<details class="fold"><summary>Embed this reading</summary><div class="fold-body"><p>The image links back to this page. It is a measured line, not a rating.</p><img src="/badge/${esc(t.id)}.svg" alt="${esc(t.name)} on ReserveWatch" width="320" height="64"><pre><code>${esc(badgeEmbed({ pageUrl: SITE_URL + '/token/' + t.id, imageUrl: SITE_URL + '/badge/' + t.id + '.svg', name: t.name, symbol: t.displayCode }))}</code></pre></div></details>
+<p class="muted">JSON: <a href="/api/tokens/${esc(t.id)}">/api/tokens/${esc(t.id)}</a> · More ${esc(METAL_NAME[t.metal] ?? t.metal)} tokens: <a href="${classHref(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)} on XRPL</a> · <a href="/methodology">How checks work</a></p>
+${citeLine('/token/' + t.id, t.updatedAt)}` });
 }
 
 // ---------- Legal / info pages (plain-language; not legal advice — have counsel review before relying on them) ----------
@@ -767,11 +804,13 @@ function snapshotsIndex() {
     title: 'Weekly XRPL Commodity Token Ledger Snapshots · ReserveWatch',
     description: 'Archive of weekly on-ledger health snapshots for gold, silver, platinum and other commodity tokens on the XRP Ledger: labels, reasons, liquidity and peg readings, week by week. Not investment advice.',
     path: '/snapshots', ogType: 'website',
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Weekly snapshots', path: '/snapshots' }])],
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Weekly snapshots', path: '/snapshots' }]), snapshotsDatasetLd()],
     body: `<div class="legal"><h1>Weekly ledger snapshots</h1>
+<p class="answer">These pages are frozen weekly copies of the legacy worst-check labels. They are not rewritten when the live comparison changes. The current reading is on the <a href="/state">state page</a>.</p>
 <p>Once a week we save a frozen copy of ReserveWatch's raw checks for every tracked XRPL commodity token: the legacy OK, WARN, or CRITICAL overall, why, and what changed since the week before. Those archived labels are not relabeled when the live site's comparison menu changes. Live comparison is on the <a href="/">home page</a>; every legacy-label change between snapshots is in the <a href="/alerts">alert log</a>.</p>
 <ul>${rows}</ul>
-<p class="notice">Automated readings of public ledger data, not investment advice, not an audit, and not proof of reserves. See the <a href="/methodology">methodology</a>.</p></div>` });
+<p class="notice">Automated readings of public ledger data, not investment advice, not an audit, and not proof of reserves. See the <a href="/methodology">methodology</a>.</p>
+${citeLine('/snapshots')}</div>` });
 }
 
 // ---------- Learn: pillar explainers ----------
@@ -918,6 +957,7 @@ function clawbackPillar() {
 
 // ---------- Commodity hubs (/commodities, /commodities/:slug) ----------
 const classTokens = (c: ClassPage) => TOKENS.filter(t => c.codes.includes(t.metal));
+const classHref = (slug: string) => classPublicPath(slug);
 const classLabel = (c: ClassPage) => c.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, '');
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -926,7 +966,7 @@ function commoditiesIndex() {
   const groups = GROUPS.map(g => {
     const items = g.slugs.map(sl => CLASS_PAGES.find(c => c.slug === sl)!).filter(Boolean).map(c => {
       const n = classTokens(c).length;
-      return `<li><a href="/commodities/${c.slug}"><b>${esc(cap(classLabel(c)))}</b></a> <span class="muted">— ${n ? `${n} XRPL token${n === 1 ? '' : 's'} tracked` : 'no public XRPL issuer tracked yet'}</span></li>`;
+      return `<li><a href="${classHref(c.slug)}"><b>${esc(cap(classLabel(c)))}</b></a> <span class="muted">— ${n ? `${n} XRPL token${n === 1 ? '' : 's'} tracked` : 'no public XRPL issuer tracked yet'}</span></li>`;
     }).join('');
     return `<h2>${esc(g.title)}</h2><ul>${items}</ul>`;
   }).join('');
@@ -936,7 +976,7 @@ function commoditiesIndex() {
     path: '/commodities',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }]),
       { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Tokenized commodities on the XRP Ledger', url: SITE_URL + '/commodities',
-        hasPart: CLASS_PAGES.map(c => ({ '@type': 'WebPage', name: c.h1, url: SITE_URL + '/commodities/' + c.slug })), publisher: { '@id': SITE_URL + '/#organization' } }],
+        hasPart: CLASS_PAGES.map(c => ({ '@type': 'WebPage', name: c.h1, url: SITE_URL + classHref(c.slug) })), publisher: { '@id': SITE_URL + '/#organization' } }],
     body: `<div class="legal"><h1>Tokenized commodities on the XRP Ledger</h1>
 <p class="notice"><b>Short version:</b> A commodity token is an IOU on the XRP Ledger that says it stands for something physical — gold, a megawatt-hour of electricity, a collection of diamonds, a silo of grain. The ledger can show how many tokens exist, who holds them and what the issuer is allowed to do (freeze, claw back). It <b>cannot</b> show that the physical goods exist. ReserveWatch reads the ledger part, honestly, for every class. Not investment advice; not an audit or proof of reserves.</p>
 <p>Today ReserveWatch runs live checks on <b>${TOKENS.length}</b> XRPL tokens across <b>${live.length}</b> classes (${esc(trackedClassList())}). Every other class below has an explainer page that says plainly when no public XRPL issuer is tracked yet — we add a token only when its issuer account can be confirmed on XRPL mainnet.</p>
@@ -956,14 +996,19 @@ function commodityPage(c: ClassPage) {
   const cards = defs.map(d => {
     const t = live(d.id);
     if (!t) return `<article class="token-card"><h2><a href="/token/${esc(d.id)}">${esc(d.name)}</a></h2><p class="muted">Reading not loaded yet.</p></article>`;
-    return renderHomeCard(t, { href: `/commodities/${commodityMeta(d.metal).slug}`, name: commodityMeta(d.metal).title });
+    return renderHomeCard(t, { href: classHref(c.slug), name: commodityMeta(d.metal).title });
   }).join('');
   const tracked = defs.length
     ? `<h2>${esc(cap(classLabel(c)))} on the ledger</h2>${header()}<div class="board">${cards}</div>`
     : '';
-  const related = (c.related ?? []).map(sl => CLASS_PAGES.find(x => x.slug === sl)).filter(Boolean).map(x => `<a href="/commodities/${x!.slug}">${esc(cap(classLabel(x!)))}</a>`).join(' · ');
+  const related = (c.related ?? []).map(sl => CLASS_PAGES.find(x => x.slug === sl)).filter(Boolean).map(x => `<a href="${classHref(x!.slug)}">${esc(cap(classLabel(x!)))}</a>`).join(' · ');
   const meta = commodityMeta(c.codes[0]);
-  const path = `/commodities/${c.slug}`;
+  const path = classHref(c.slug);
+  const names = defs.map(d => d.name).join(', ');
+  const classFaqs = defs.length ? [
+    { q: `Which ${meta.name} tokens does ReserveWatch track on the XRP Ledger?`, a: `As of the latest reading, the tracked ${meta.name} tokens are ${names}. Each has its own page with issuer controls, liquidity, and, where a price can be read, 7-day volume.` },
+    { q: `Does an XRPL ${meta.name} token prove the commodity is in a vault?`, a: `No. On-ledger supply counts tokens. It does not show that a physical commodity exists. ReserveWatch does not audit vaults, and a measured reading is not a buy or sell rating.` },
+  ] : [];
   const qs = [
     'Who is the issuer, and does its own website publish an <code>xrp-ledger.toml</code> that lists the issuer account?',
     'Can the issuer freeze or claw back tokens? (Check the token page\u2019s issuer flags.)',
@@ -976,11 +1021,13 @@ function commodityPage(c: ClassPage) {
     refresh: defs.length > 0,
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }, { name: cap(classLabel(c)), path }]),
+      ...(classFaqs.length ? [faqPageLd(classFaqs)] : []),
       { '@context': 'https://schema.org', '@type': 'Article', headline: c.h1, description: c.description, datePublished: '2026-10-30', dateModified: LEGAL_UPDATED_ISO,
         mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
         about: { '@type': 'Thing', name: meta.title } },
     ],
     body: `<div class="legal legal-wide"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
+${defs.length ? `<p class="answer">As of ${esc(readingDay())}, ReserveWatch tracks ${defs.length} ${esc(meta.name)} token${defs.length === 1 ? '' : 's'} on the XRP Ledger: ${esc(names)}. The figures below are public ledger readings, not a buy or sell list.</p>` : ''}
 <p class="notice"><b>Automated ledger readings, not advice.</b> ReserveWatch is not an audit, not proof of reserves and not investment advice. It does not tell anyone to buy, sell or hold a token.</p>
 <h2>What is a tokenized ${esc(c.noun ?? classLabel(c))} token?</h2><p>${c.what}</p>
 <h2>How price is compared</h2><p>${c.pricing}</p>
@@ -988,7 +1035,9 @@ function commodityPage(c: ClassPage) {
 ${tracked}
 ${c.elsewhere ? `<h2>Outside the XRP Ledger</h2><p>${esc(c.elsewhere)} ReserveWatch covers XRPL only; these are listed for context, not tracked or endorsed.</p>` : ''}
 <h2>Questions to ask before relying on a ${esc(c.noun ?? classLabel(c))} token</h2><ul>${qs.map(q => `<li>${q}</li>`).join('')}</ul>
-<p class="muted">How labels are set: <a href="/methodology">methodology</a> · Data: <a href="/api/commodities/${c.slug}">/api/commodities/${c.slug}</a> and <a href="/api/tokens">/api/tokens</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback &amp; freeze explained</a>${related ? ` · Related: ${related}` : ''}</p></div>` });
+${classFaqs.length ? `<h2>Short answers</h2>${classFaqs.map(f => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('')}` : ''}
+<p class="muted">How labels are set: <a href="/methodology">methodology</a> · Data: <a href="/api/commodities/${c.slug}">/api/commodities/${c.slug}</a> and <a href="/api/tokens">/api/tokens</a> · <a href="/state">State of XRPL commodity tokens</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback &amp; freeze explained</a>${related ? ` · Related: ${related}` : ''}</p>
+${citeLine(path, snap?.updatedAt)}</div>` });
 }
 
 
@@ -1157,7 +1206,10 @@ app.use((q, r, next) => {
   next();
 });
 app.get('/robots.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt()); });
-app.get('/llms.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(llmsTxt()); });
+app.get('/llms.txt', (_q, r) => {
+  const facts = snap ? stateAnswer(summarizeState(stateRows(), snap.updatedAt, snap.marketActivity)) : '';
+  r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(llmsTxt(facts));
+});
 // Crawlers that request /.well-known/llms.txt land on the same summary. /llms.txt stays the canonical URL.
 app.get('/.well-known/llms.txt', (_q, r) => {
   r.set('Cache-Control', 'public, max-age=3600');
@@ -1165,7 +1217,11 @@ app.get('/.well-known/llms.txt', (_q, r) => {
 });
 app.get('/sitemap.xml', (_q, r) => {
   const live = (snap?.updatedAt ?? new Date().toISOString()).slice(0, 10);
-  r.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml(live, LEGAL_UPDATED_ISO));
+  const xml = sitemapXml(/^\d{4}-\d{2}-\d{2}$/.test(live) ? live : new Date().toISOString().slice(0, 10), LEGAL_UPDATED_ISO);
+  r.set('Content-Type', 'text/xml; charset=utf-8');
+  r.set('Cache-Control', 'public, max-age=3600');
+  r.set('X-Content-Type-Options', 'nosniff');
+  r.send(xml.endsWith('\n') ? xml : xml + '\n');
 });
 app.use(express.static(PUBLIC_DIR, { maxAge: '7d', index: false }));
 app.get('/', (_q, r) => { r.send(listPage()); });
@@ -1186,7 +1242,7 @@ app.get('/alerts', (_q, r) => {
     path: '/alerts', refresh: true,
     body: `<h1>Health status alert log</h1><p class="muted">Alerts follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. The live comparison is on each token page. Labels are not reserves or solvency, and not buy or sell signals.</p><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table>` }));
 });
-app.get('/methodology', (_q, r) => { r.send(infoPage('How ReserveWatch Compares XRPL Commodity Tokens · ReserveWatch', 'Methodology: comparison labels and the legacy overall', '/methodology', 'How ReserveWatch separates measured liquidity and peg, issuer-control features, and unconfirmed or unmeasurable gaps from active problems. The legacy OK / WARN / CRITICAL overall is the worst raw check and is not rewritten. Not an audit or proof of reserves.', METHODOLOGY(), COMPARE_UPDATED)); });
+app.get('/methodology', (_q, r) => { r.send(infoPage('How ReserveWatch Compares XRPL Commodity Tokens · ReserveWatch', 'Methodology: comparison labels and the legacy overall', '/methodology', 'How ReserveWatch separates measured liquidity and peg, issuer-control features, and unconfirmed or unmeasurable gaps from active problems. The legacy OK / WARN / CRITICAL overall is the worst raw check and is not rewritten. Not an audit or proof of reserves.', `<p class="answer">ReserveWatch separates measured facts, issuer features, and missing data from active problems. The legacy OK, WARN, or CRITICAL overall is the worst raw check. It is not a buy or sell rating and not proof of reserves.</p>${METHODOLOGY()}${citeLine('/methodology', COMPARE_UPDATED_ISO)}`, COMPARE_UPDATED)); });
 app.get('/faq', (_q, r) => { r.send(faqPage()); });
 app.get('/about', (_q, r) => { r.send(infoPage('About ReserveWatch — Independent XRPL Commodity Token Monitor', 'About ReserveWatch', '/about', 'ReserveWatch is an independent, issuer-neutral monitor of commodity tokens on the XRP Ledger — gold, silver, platinum, energy, diamonds and more. It compares issuer controls, liquidity, and public verification. What it watches, what it does not do, and how to contact us.', ABOUT(), COMPARE_UPDATED)); });
 app.get('/independent', (_q, r) => { r.send(page({
@@ -1215,9 +1271,56 @@ app.get('/briefs/:slug', (q, r) => {
   r.send(briefPage(b));
 });
 app.get('/commodities', (_q, r) => { r.send(commoditiesIndex()); });
+function statePage() {
+  const summary = summarizeState(stateRows(), snap?.updatedAt ?? new Date().toISOString(), snap?.marketActivity);
+  const faqs = [
+    { q: 'What does this page measure?', a: 'It counts issuers, tokens, AMM pool depth, 7-day on-ledger volume, and the legacy worst-check totals from the current ReserveWatch reading. It is not a credit rating.' },
+    { q: 'Does AMM depth prove reserves?', a: 'No. Depth is the value sitting in the tracked AMM pools. It does not show that a commodity is in a vault, and it is not an audit.' },
+  ];
+  const table = stateRows().map(row => `<tr><td><a href="/token/${esc(row.id)}">${esc(row.name)}</a></td><td>${esc(row.status.toUpperCase())}</td><td>${row.depthUsd == null ? 'not measured' : usd(row.depthUsd, 0)}</td><td>${row.volumeMeasured ? usd(row.volumeUsd, (row.volumeUsd ?? 0) >= 100 ? 0 : 2) : 'not measured'}</td></tr>`).join('');
+  return page({
+    title: 'State of XRPL commodity tokens · ReserveWatch',
+    description: 'Current issuers, token count, AMM depth, 7-day volume, and legacy worst-check counts for commodity tokens on the XRP Ledger. Not a buy or sell rating and not proof of reserves.',
+    path: '/state', refresh: true,
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'State', path: '/state' }]),
+      faqPageLd(faqs),
+      datasetLd(snap?.updatedAt),
+    ],
+    body: `<div class="legal legal-wide"><h1>State of XRPL commodity tokens</h1>
+<p class="answer">${esc(stateAnswer(summary))}</p>
+${header()}
+<p class="muted">${summary.volumeGaps ? `${summary.volumeGaps} token${summary.volumeGaps === 1 ? '' : 's'} left out of the volume total. ` : ''}${summary.depthGaps ? `${summary.depthGaps} without a depth reading. ` : ''}A missing figure is not measured, not zero.</p>
+<table><tr><th>Token</th><th>Legacy check</th><th>AMM depth</th><th>7-day volume</th></tr>${table || '<tr><td colspan="4">No reading yet.</td></tr>'}</table>
+<h2>Short answers</h2>${faqs.map(f => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('')}
+<p class="muted">Frozen weeks: <a href="/snapshots">weekly snapshots</a> · <a href="/methodology">Methodology</a> · <a href="/api/tokens">JSON</a></p>
+${citeLine('/state', summary.asOf)}</div>`,
+  });
+}
+app.get('/state', (_q, r) => { r.send(statePage()); });
+app.get('/badge/:file', (q, r) => {
+  const id = String(q.params.file).replace(/\.svg$/i, '');
+  const def = TOKENS.find(x => x.id === id);
+  if (!def) return void r.status(404).type('image/svg+xml').send(badgeSvg({ name: 'Unknown token', symbol: '—', line: 'Not on ReserveWatch' }));
+  const t = snap?.tokens.find(x => x.id === id);
+  const line = t?.activity ? activityPlain(t.activity) : 'Reading not loaded';
+  r.set('Content-Type', 'image/svg+xml; charset=utf-8');
+  r.set('Cache-Control', 'public, max-age=300');
+  r.set('X-Content-Type-Options', 'nosniff');
+  r.send(badgeSvg({ name: def.name, symbol: def.displayCode, line }));
+});
+for (const slug of ['gold', 'silver', 'platinum', 'energy', 'diamonds']) {
+  app.get('/' + slug, (_q, r) => {
+    const c = CLASS_PAGES.find(x => x.slug === slug);
+    if (!c || !classTokens(c).length) return void r.redirect(302, '/commodities');
+    r.send(commodityPage(c));
+  });
+}
 app.get('/commodities/:slug', (q, r) => {
   const c = CLASS_PAGES.find(x => x.slug === q.params.slug);
   if (!c) return void r.status(404).send(page({ title: 'Not found · ReserveWatch', description: 'This page does not exist on ReserveWatch.', path: q.path, noindex: true, body: '<h1>Not found</h1><p>Unknown commodity. <a href="/commodities">See all commodity classes</a>.</p>' }));
+  const dest = classHref(c.slug);
+  if (dest !== `/commodities/${c.slug}`) return void r.redirect(301, dest);
   r.send(commodityPage(c));
 });
 app.get('/api/commodities', (_q, r) => { r.json({ updatedAt: snap?.updatedAt ?? null, classes: CLASS_PAGES.map(commodityJson) }); });

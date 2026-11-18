@@ -71,7 +71,29 @@ export const websiteLd = () => ({
   '@context': 'https://schema.org', '@type': 'WebSite', '@id': SITE_URL + '/#website',
   name: SITE_NAME, alternateName: `${SITE_NAME} — ${TAGLINE}`, url: SITE_URL + '/', inLanguage: 'en',
   description: DEFAULT_DESCRIPTION, publisher: { '@id': SITE_URL + '/#organization' },
+  // No SearchAction: the site has no query search. A made-up search target would be invalid.
 });
+
+/** A token page as a Thing with measured properties. No offers, no price claim, no rating. */
+export function tokenThingLd(t: { id: string; name: string; description: string; properties: { name: string; value: string }[] }) {
+  return {
+    '@context': 'https://schema.org', '@type': 'Thing', '@id': abs(`/token/${t.id}`) + '#thing',
+    name: t.name, url: abs(`/token/${t.id}`), description: t.description,
+    additionalProperty: t.properties.filter(p => p.value.trim()).map(p => ({ '@type': 'PropertyValue', name: p.name, value: p.value })),
+  };
+}
+
+/** The weekly snapshot archive as a dataset. Each frozen page is one distribution. */
+export function snapshotsDatasetLd() {
+  return {
+    '@context': 'https://schema.org', '@type': 'Dataset', '@id': abs('/snapshots') + '#dataset',
+    name: 'ReserveWatch weekly XRPL commodity token snapshots',
+    description: 'Frozen weekly copies of automated XRP Ledger readings for tracked commodity tokens. Legacy OK, WARN, and CRITICAL labels are the worst raw check from that week. They are not rewritten later, and they are not audits or proof of reserves.',
+    url: abs('/snapshots'), isAccessibleForFree: true, inLanguage: 'en',
+    creator: { '@id': SITE_URL + '/#organization' },
+    distribution: SNAPSHOTS.map(s => ({ '@type': 'DataDownload', encodingFormat: 'text/html', contentUrl: abs(`/snapshots/${s.week}`) })),
+  };
+}
 
 /** Dataset: the public JSON API really is a free, machine-readable feed of these readings. */
 export const datasetLd = (updatedAt?: string) => ({
@@ -106,17 +128,25 @@ export const faqPageLd = (items: FaqItem[]) => ({
 // ---------- robots.txt / sitemap.xml / llms.txt ----------
 export const robotsTxt = () => `# ${SITE_NAME} — ${SITE_URL}
 # Search and AI crawlers are allowed, including GPTBot, ClaudeBot, Google-Extended, PerplexityBot, Applebot-Extended, and CCBot.
+# Machine-readable summary: ${SITE_URL}/llms.txt
 User-agent: *
 Allow: /
 Disallow: /api/refresh
 Disallow: /healthz
 
 Sitemap: ${SITE_URL}/sitemap.xml
-# Summary for language models: ${SITE_URL}/llms.txt
 `;
 
+/** Classes with tracked tokens use a short URL. Others stay under /commodities. */
+export function classPublicPath(slug: string): string {
+  const page = CLASS_PAGES.find(c => c.slug === slug);
+  const tracked = !!page && TOKENS.some(t => page.codes.includes(t.metal));
+  const short = tracked && ['gold', 'silver', 'platinum', 'energy', 'diamonds'].includes(slug);
+  return short ? `/${slug}` : `/commodities/${slug}`;
+}
+
 /** Short, machine-readable site summary (llms.txt). Facts only; no issuer addresses. */
-export function llmsTxt(): string {
+export function llmsTxt(liveFacts?: string): string {
   const learn = [
     { href: abs('/learn/clawback-freeze-trust-lines'), title: 'Clawback, freeze and trust lines', note: 'What an issuer can and cannot do to tokens held on a trust line.' },
     ...LEARN_GUIDES.map(g => ({ href: abs(`/learn/${g.slug}`), title: g.crumb, note: g.blurb })),
@@ -128,6 +158,8 @@ export function llmsTxt(): string {
 ${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity. The live pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
 
 7-day trading volume counts DEX fills and AMM swaps against XRP, RLUSD, and USDV, from XRPL Meta's exchange index of public ledger history. Row size is the quote amount and row price is quote per token; dollars are the quote amount times the quote's USD price (current XRP/USD, or $1 for RLUSD and USDV). A fill more than 5× from spot, where a spot price per token exists, is left out, and a week those fills dominate is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks. Those stables are quote assets, not commodity tokens. A cut-off window is not measured, not zero. Volume is not a health label and not a buy or sell signal.
+
+${liveFacts ? liveFacts + '\n\n' : ''}Cite a reading as: ReserveWatch, YYYY-MM-DD, ${SITE_URL}/<page>. The date is the reading time on that page.
 
 ## What ${SITE_NAME} is not
 
@@ -143,6 +175,8 @@ ${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a c
 - [Learn](${abs('/learn')}): plain-language explainers.
 ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
 - [Commodities](${abs('/commodities')}): asset classes on the XRP Ledger, including classes with no public issuer tracked yet.
+- [State of XRPL commodity tokens](${abs('/state')}): issuers, tokens, AMM depth, 7-day volume, and legacy counts from the current reading.
+${CLASS_PAGES.filter(c => TOKENS.some(t => c.codes.includes(t.metal))).map(c => `- [${c.h1}](${abs(classPublicPath(c.slug))}): tracked ${c.slug} tokens with live readings.`).join('\n')}
 - [Weekly snapshots](${abs('/snapshots')}): frozen weekly copies of the automated checks. Each week: ${abs('/snapshots')}/{YYYY-MM-DD}.
 - [Briefs](${abs('/briefs')}): short dated notes when a new commodity issuer appears or a CRITICAL / soft-label situation is worth documenting. Each brief: ${abs('/briefs')}/{slug}.
 - [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
@@ -166,7 +200,8 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },
-    ...CLASS_PAGES.map(c => ({ loc: abs(`/commodities/${c.slug}`), lastmod: legalDate, changefreq: 'weekly', priority: '0.7' })),
+    { loc: abs('/state'), lastmod: liveDate, changefreq: 'daily', priority: '0.9' },
+    ...CLASS_PAGES.map(c => ({ loc: abs(classPublicPath(c.slug)), lastmod: TOKENS.some(t => c.codes.includes(t.metal)) ? liveDate : legalDate, changefreq: 'weekly', priority: TOKENS.some(t => c.codes.includes(t.metal)) ? '0.8' : '0.5' })),
     { loc: abs('/methodology'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/about'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },
     { loc: abs('/independent'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },
