@@ -376,7 +376,8 @@ function changeLabel(direction: VolumeDirection, pct: number | null): string {
 function chainCell(c: ChainSummary): string {
   const value = c.marketValueUsd == null ? 'not measured' : usd(c.marketValueUsd, Math.abs(c.marketValueUsd) >= 100 ? 0 : 2);
   const tokens = c.tokens == null ? 'tokens not measured' : `${c.tokens.toLocaleString('en-US')} token${c.tokens === 1 ? '' : 's'}`;
-  const volume = c.volume7dUsd == null ? '7-day volume not measured' : `7-day volume ${usd(c.volume7dUsd, Math.abs(c.volume7dUsd) >= 100 ? 0 : 2)} · ${changeLabel(c.volumeDirection, c.volumeChangePct)}`;
+  const volumeGap = c.volumeGaps ? ` · ${c.volumeGaps} not measured` : '';
+  const volume = c.volume7dUsd == null ? '7-day volume not measured' : `7-day volume ${usd(c.volume7dUsd, Math.abs(c.volume7dUsd) >= 100 ? 0 : 2)} · ${changeLabel(c.volumeDirection, c.volumeChangePct)}${volumeGap}`;
   return `<a class="chain-cell" href="/chains#${esc(c.id)}"><span class="k">${esc(c.name)}</span><b>${value}</b><span>${tokens}</span><span>${volume}</span></a>`;
 }
 function chainTeaser(): string {
