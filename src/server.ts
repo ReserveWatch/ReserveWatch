@@ -75,7 +75,10 @@ async function attachVolume(force: boolean) {
   const target = snap;
   volumeBusy = true;
   try {
-    const { byId } = await loadActivities(target.tokens.map(t => ({ id: t.id, currency: t.currency, issuer: t.issuer, displayCode: t.displayCode })));
+    const { byId } = await loadActivities(target.tokens.map(t => ({
+      id: t.id, currency: t.currency, issuer: t.issuer, displayCode: t.displayCode,
+      referenceUsdPerToken: t.spot?.usdPerToken ?? null,
+    })), target.xrpUsd);
     if (snap !== target) return;
     const rows = snap.tokens.map(t => {
       t.activity = byId[t.id] ?? unknownActivity(t.displayCode, 'No volume reading for this token.');
@@ -518,7 +521,7 @@ const METHODOLOGY = () => `
 <p>All ledger data comes from public XRPL mainnet servers (account info, gateway balances, trust lines, AMM info and order books). We refresh about every ${Math.round(POLL_SEC / 60)} minutes. When a token's label changes, the change and its reasons are saved in the <a href="/alerts">alert log</a>. The raw readings are free as JSON at <a href="/api/tokens">/api/tokens</a>. Data can be late, missing or wrong if a server or the price API has problems.</p>
 
 <h2>Trading volume</h2>
-<p>A separate reading, not a health label. For each tracked commodity token, ReserveWatch counts DEX fills and AMM swaps against XRP, RLUSD, and USDV over the last 7 days and the 7 days before that. The count comes from XRPL Meta's exchange list, which is indexed from public ledger history. Dollars are each fill's token amount times its indexed USD price. RLUSD and USDV are the quote side, at a nominal $1, and are not added as commodity tokens. If the list is cut off inside the window, the total is <b>not measured</b> rather than shown as zero. A complete list with no fills is a measured zero, and that is not a warning. Weekly snapshots saved before this reading do not contain volume, and those weeks were not reconstructed.</p>
+<p>A separate reading, not a health label. For each tracked commodity token, ReserveWatch counts DEX fills and AMM swaps against XRP, RLUSD, and USDV over the last 7 days and the 7 days before that. The count comes from XRPL Meta's exchange list, which is indexed from public ledger history. Each row's size is the quote amount and its price is quote per token, so the token amount is quote ÷ price. Dollars are that quote amount times the quote's USD price: the current XRP/USD for an XRP leg, and a nominal $1 for RLUSD and USDV. Those stables are not added as commodity tokens. Where a spot price per token exists, a fill more than 5× away from spot is left out. If the left-out fills are larger than the fills kept, that week is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks, so a week that is not measured cannot set it. If the list is cut off inside the window, the total is <b>not measured</b> rather than shown as zero. A complete list with no fills is a measured zero, and that is not a warning. Weekly snapshots saved before this reading do not contain volume, and those weeks were not reconstructed.</p>
 
 <h2>What this is not</h2>
 <ul>
@@ -1089,7 +1092,7 @@ const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
   },
   {
     q: 'How is trading volume measured?',
-    a: `For each tracked commodity token, ${SITE_NAME} counts XRP Ledger DEX fills and AMM swaps against XRP, RLUSD, and USDV over a rolling 7 days, and compares that with the prior 7 days. The fills come from XRPL Meta's exchange list, indexed from public ledger history. Dollars are each fill's token amount times its indexed USD price. RLUSD and USDV are quote assets at a nominal $1, not commodity tokens, so their own volume is not part of the total. If the list is cut off, the total is not measured rather than shown as zero. A measured zero is a week with no fills, and it is not a warning. The figure is trading activity only. It is not proof of reserves, not an audit, and not a signal to buy or sell. Snapshots saved before this reading do not include volume.`,
+    a: `For each tracked commodity token, ${SITE_NAME} counts XRP Ledger DEX fills and AMM swaps against XRP, RLUSD, and USDV over a rolling 7 days, and compares that with the prior 7 days. The fills come from XRPL Meta's exchange list, indexed from public ledger history. Each row's size is the quote amount and its price is quote per token; the token amount is quote divided by that price. Dollars are the quote amount times the quote's USD price, using the current XRP/USD for an XRP leg and a nominal $1 for RLUSD and USDV. Those stables are quote assets, not commodity tokens. Where a spot price per token exists, a fill more than 5× from spot is left out. If those fills outweigh the ones kept, that week is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks, so an unmeasured week cannot set it. If the list is cut off, the total is not measured rather than shown as zero. A measured zero is a week with no fills, and it is not a warning. The figure is trading activity only. It is not proof of reserves, not an audit, and not a signal to buy or sell. Snapshots saved before this reading do not include volume.`,
     more: '<a href="/methodology">Methodology</a> · <a href="/">Market activity</a>',
   },
   {
