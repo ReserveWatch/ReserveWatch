@@ -14,7 +14,9 @@ import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './co
 import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
 import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
 import { renderDetailLead, renderHomeCard } from './face.js';
-import { industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
+import { industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeDirection, type VolumeWeek } from './volume.js';
+import { buildChainGrowth, rememberChainWeek, weekPoint, type ChainGrowth, type ChainSummary, type ChainWeek, type MetalSpots, type XrplChainToken } from './chains.js';
+import { loadOffchainReadings } from './chainFeed.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -98,7 +100,69 @@ async function attachVolume(force: boolean) {
     fs.writeFileSync(path.join(DATA_DIR, 'latest.json'), JSON.stringify(snap, null, 2));
     console.log(`[volume] ${snap.marketActivity.usdTotal == null ? 'not measured' : '$' + Math.round(snap.marketActivity.usdTotal)} over ${snap.marketActivity.tokensPriced} priced tokens`);
   } catch (e) { console.error('[volume] failed', e); }
-  finally { volumeBusy = false; }
+  finally { volumeBusy = false; void attachChains(false); }
+}
+
+let chainBusy = false;
+let chainPending = false;
+let chainAt = 0;
+const CHAIN_TTL_MS = 30 * 60 * 1000;
+const chainWeeksPath = () => path.join(DATA_DIR, 'chain-weeks.json');
+function readChainWeeks(): ChainWeek[] {
+  try { const rows = JSON.parse(fs.readFileSync(chainWeeksPath(), 'utf8')); return Array.isArray(rows) ? rows : []; } catch { return []; }
+}
+function xrplChainTokens(): XrplChainToken[] {
+  return (snap?.tokens ?? []).map(t => {
+    const measured = !!(t.activity?.measured && t.activity.usdPriced && t.activity.recent.complete);
+    const priorOk = !!(measured && t.activity?.prior.complete && t.activity.prior.usdVolume != null);
+    return {
+      id: t.id, issuer: t.issuer, currency: t.currency, symbol: t.displayCode, name: t.name,
+      holders: t.supply.circulating != null ? t.holders.nonZero : null,
+      circulating: t.supply.circulating,
+      usdPerToken: t.spot.unsupported ? null : t.spot.usdPerToken,
+      noSpot: !!t.spot.unsupported,
+      unitUnconfirmed: t.knownStatus === 'unverified',
+      volumeUsd: measured ? t.activity!.recent.usdVolume : null,
+      priorVolumeUsd: priorOk ? t.activity!.prior.usdVolume : null,
+      volumeMeasured: measured,
+    };
+  });
+}
+function metalSpots(): MetalSpots {
+  const out: MetalSpots = {};
+  for (const t of snap?.tokens ?? []) {
+    const metal = t.metal;
+    if ((metal === 'XAU' || metal === 'XAG' || metal === 'XPT' || metal === 'XPD') && t.spot.usdPerOz != null && out[metal] == null) out[metal] = t.spot.usdPerOz;
+  }
+  return out;
+}
+/** Commodity counts by chain. Cached so the ledger poll does not re-read every contract. */
+async function attachChains(force: boolean) {
+  if (!snap) return;
+  if (chainBusy) { chainPending = true; return; }
+  if (!force && Date.now() - chainAt < CHAIN_TTL_MS && snap.chainGrowth) return;
+  chainBusy = true;
+  try {
+    console.log('[chains] reading');
+    const offchain = await loadOffchainReadings();
+    if (!snap) return;
+    const asOf = new Date().toISOString();
+    const week = isoWeek(new Date());
+    let trend = readChainWeeks();
+    const draft = buildChainGrowth({ asOf, week, xrpl: xrplChainTokens(), offchain, spots: metalSpots(), trend });
+    trend = rememberChainWeek(trend, { week, asOf, chains: draft.chains.map(weekPoint) });
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(chainWeeksPath(), JSON.stringify(trend, null, 2));
+    snap.chainGrowth = buildChainGrowth({ asOf, week, xrpl: xrplChainTokens(), offchain, spots: metalSpots(), trend });
+    chainAt = Date.now();
+    fs.writeFileSync(path.join(DATA_DIR, 'latest.json'), JSON.stringify(snap, null, 2));
+    const eth = snap.chainGrowth.chains.find(c => c.id === 'ethereum');
+    console.log(`[chains] ethereum ${eth?.marketValueUsd == null ? 'not measured' : '$' + Math.round(eth.marketValueUsd)}`);
+  } catch (e) { console.error('[chains] failed', e); }
+  finally {
+    chainBusy = false;
+    if (chainPending) { chainPending = false; void attachChains(true); }
+  }
 }
 
 // ---------- HTML helpers ----------
@@ -222,8 +286,15 @@ footer nav a{font-weight:650;text-decoration:none}
 .volume{margin:8px 0 0;font-size:.98rem;color:var(--rw-navy)}
 .spark{display:block}
 .spark rect{fill:var(--rw-navy)}
+.chain-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0 22px}
+.chain-cell{display:block;background:var(--rw-card);border:1px solid var(--rw-border);border-radius:14px;padding:12px 14px;color:inherit;text-decoration:none;min-width:0}
+.chain-cell .k{display:block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--rw-gold-ink);font-weight:750}
+.chain-cell b{display:block;margin-top:4px;font-family:var(--serif);font-size:1.45rem;font-weight:500;color:var(--rw-navy);line-height:1.1}
+.chain-cell span{display:block;color:var(--rw-muted);font-size:.88rem;margin-top:3px}
+.chains h2{font-family:var(--sans);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--rw-gold-ink);margin:0 0 4px;font-weight:750}
 @media(max-width:720px){
 header .wrap,main,footer .wrap{padding-left:16px;padding-right:16px}
+.chain-grid{grid-template-columns:1fr}
 header .wrap{flex-direction:column;align-items:stretch;gap:12px;padding-top:12px;padding-bottom:12px}
 header .brand{width:100%}
 header .brand img{height:auto;width:100%;max-width:441px}
@@ -245,9 +316,9 @@ ${o.refresh ? '<meta http-equiv="refresh" content="60">' : ''}${seoHead(o)}<meta
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/chains">Chains</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/chains">Chains</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
 <p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Ledger: ${esc(endpointList()[0])}.</p></div></footer></body></html>`;
 
@@ -293,6 +364,53 @@ function marketActivityHtml(): string {
   return `<section class="activity" aria-label="Market activity"><div><h2>Market activity</h2><p class="activity-total">${usd(m.usdTotal, 0)} <span>rolling 7-day volume${extra ? ` · ${esc(extra)}` : ''}</span></p><p class="chg">${esc(change)}</p></div>${spark}<details class="fold"><summary>How volume is measured</summary><div class="fold-body"><p>${esc(m.method)}</p><p>${esc(m.historyNote)}</p></div></details></section>`;
 }
 
+const NET_NAME: Record<string, string> = { xrpl: 'XRPL', ethereum: 'Ethereum', base: 'Base', 'arbitrum-one': 'Arbitrum', 'optimistic-ethereum': 'Optimism', solana: 'Solana', avalanche: 'Avalanche', stellar: 'Stellar' };
+const shown = (n: number | null, kind: 'usd' | 'n' = 'n') => n == null ? '<span class="muted">not measured</span>' : kind === 'usd' ? usd(n, Math.abs(n) >= 100 ? 0 : 2) : n.toLocaleString('en-US');
+function changeLabel(direction: VolumeDirection, pct: number | null): string {
+  if (direction === 'down' && pct != null) return `Down ${pctLabel(pct)}%`;
+  if (direction === 'up' && pct != null) return `Up ${pctLabel(pct)}%`;
+  if (direction === 'flat') return 'About the same';
+  if (direction === 'up') return 'Up from none';
+  return 'Change not measured';
+}
+function chainCell(c: ChainSummary): string {
+  const value = c.marketValueUsd == null ? 'not measured' : usd(c.marketValueUsd, Math.abs(c.marketValueUsd) >= 100 ? 0 : 2);
+  const tokens = c.tokens == null ? 'tokens not measured' : `${c.tokens.toLocaleString('en-US')} token${c.tokens === 1 ? '' : 's'}`;
+  const volume = c.volume7dUsd == null ? '7-day volume not measured' : `7-day volume ${usd(c.volume7dUsd, Math.abs(c.volume7dUsd) >= 100 ? 0 : 2)} · ${changeLabel(c.volumeDirection, c.volumeChangePct)}`;
+  return `<a class="chain-cell" href="/chains#${esc(c.id)}"><span class="k">${esc(c.name)}</span><b>${value}</b><span>${tokens}</span><span>${volume}</span></a>`;
+}
+function chainTeaser(): string {
+  const g = snap?.chainGrowth;
+  if (!g) return `<section class="chains" aria-label="Chains"><h2>Chains</h2><p class="volume">Chain comparison not measured.</p></section>`;
+  return `<section class="chains" aria-label="Chains"><h2>Chains</h2><p class="muted">Commodity tokens by network. No health grade off the XRP Ledger. <a href="/chains">Full comparison</a></p><div class="chain-grid">${g.chains.map(chainCell).join('')}</div></section>`;
+}
+function chainTokenTable(c: ChainSummary): string {
+  if (!c.rows.length) return '';
+  const body = c.rows.map(r => `<tr><td>${c.id === 'xrpl' ? `<a href="/token/${esc(r.id)}">${esc(r.name)}</a>` : esc(r.name)} <span class="muted">${esc(r.symbol)}</span></td><td>${esc(r.issuer)}</td><td>${esc(NET_NAME[r.network] ?? r.network)}</td><td>${shown(r.supply)}</td><td>${shown(r.priceUsd, 'usd')}</td><td>${shown(r.marketValueUsd, 'usd')}</td><td>${shown(r.volume7dUsd, 'usd')}</td></tr>`).join('');
+  return `<table><tr><th>Token</th><th>Issuer</th><th>Network</th><th>Supply</th><th>Price</th><th>Market value</th><th>7-day volume</th></tr>${body}</table>`;
+}
+function chainsPage(): string {
+  const g = snap?.chainGrowth;
+  const rows = (g?.chains ?? []).map(c => `<section id="${esc(c.id)}"><h2>${esc(c.name)}</h2>
+<p>${shown(c.issuers)} issuers · ${shown(c.tokens)} tokens · holders ${shown(c.holders)} · market value ${shown(c.marketValueUsd, 'usd')} · ${changeLabel(c.marketDirection, c.marketChangePct)} · 7-day volume ${shown(c.volume7dUsd, 'usd')} · ${changeLabel(c.volumeDirection, c.volumeChangePct)}</p>
+${c.marketGaps ? `<p class="muted">${c.marketGaps} market ${c.marketGaps === 1 ? 'value' : 'values'} not measured.${c.noSpot ? ` ${c.noSpot} left out of the dollar figure.` : ''}</p>` : (c.noSpot ? `<p class="muted">${c.noSpot} left out of the dollar figure.</p>` : '')}
+${c.volumeGaps ? `<p class="muted">${c.volumeGaps} volume ${c.volumeGaps === 1 ? 'figure' : 'figures'} not measured.</p>` : ''}
+<details class="fold"><summary>How this chain is measured</summary><div class="fold-body"><p>${esc(c.method)}</p></div></details>
+${chainTokenTable(c)}</section>`).join('');
+  return page({
+    title: 'Commodity tokens by chain · ReserveWatch',
+    description: 'Issuers, tokens, holders, market value, and 7-day volume for commodity tokens on the XRP Ledger, Ethereum, Ethereum L2s, Solana, Stellar, and Avalanche. Missing figures are not measured. Not a health grade and not investment advice.',
+    path: '/chains',
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Chains', path: '/chains' }])],
+    body: `<div class="legal legal-wide"><p class="crumb"><a href="/">Home</a></p><h1>Commodity tokens by chain</h1>
+<p class="lede">Issuers, tokens, holders, market value, and 7-day volume. Dollar stables are not counted. No health grade off the XRP Ledger.</p>
+${g ? '' : '<p>Chain comparison not measured.</p>'}
+${rows}
+<details class="fold"><summary>How the comparison is measured</summary><div class="fold-body"><p>${esc(g?.method ?? '')}</p><p>${esc(g?.historyNote ?? '')}</p></div></details>
+<p class="muted">JSON: <a href="/api/chains">/api/chains</a>. XRPL token pages stay on this site. Other chains are listed here only.</p></div>`,
+  });
+}
+
 function listPage() {
   const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
   return page({
@@ -317,6 +435,7 @@ ${header()}
 <p>RLUSD and USDV are valued at a nominal $1. That is the issuer-stated peg, not a reserve check. USDV is not graded as a commodity.</p>
 </div></details></div>
 ${classStrip()}
+${chainTeaser()}
 ${marketActivityHtml()}
 <div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>
 <p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>` });
@@ -521,6 +640,8 @@ const METHODOLOGY = () => `
 <p>All ledger data comes from public XRPL mainnet servers (account info, gateway balances, trust lines, AMM info and order books). We refresh about every ${Math.round(POLL_SEC / 60)} minutes. When a token's label changes, the change and its reasons are saved in the <a href="/alerts">alert log</a>. The raw readings are free as JSON at <a href="/api/tokens">/api/tokens</a>. Data can be late, missing or wrong if a server or the price API has problems.</p>
 
 <h2>Trading volume</h2>
+<h2>Chains</h2>
+<p>A separate count, not a health grade. <a href="/chains">Commodity tokens by chain</a> lists issuers, tokens, holders where they can be counted, market value, and 7-day volume for the XRP Ledger and for a maintained list on Ethereum, Ethereum L2s, and Avalanche. Solana and Stellar are shown as not measured. Dollar stables are not included. Market value is supply × token price on that chain. It is not a vault value and not a headline market cap. No token outside the XRP Ledger gets a Caution or Critical label here.</p>
 <p>A separate reading, not a health label. For each tracked commodity token, ReserveWatch counts DEX fills and AMM swaps against XRP, RLUSD, and USDV over the last 7 days and the 7 days before that. The count comes from XRPL Meta's exchange list, which is indexed from public ledger history. Each row's size is the quote amount and its price is quote per token, so the token amount is quote ÷ price. Dollars are that quote amount times the quote's USD price: the current XRP/USD for an XRP leg, and a nominal $1 for RLUSD and USDV. Those stables are not added as commodity tokens. Where a spot price per token exists, a fill more than 5× away from spot is left out. If the left-out fills are larger than the fills kept, that week is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks, so a week that is not measured cannot set it. If the list is cut off inside the window, the total is <b>not measured</b> rather than shown as zero. A complete list with no fills is a measured zero, and that is not a warning. Weekly snapshots saved before this reading do not contain volume, and those weeks were not reconstructed.</p>
 
 <h2>What this is not</h2>
@@ -746,7 +867,7 @@ ${why.length ? `<p style="margin:8px 0 0"><b>Why:</b></p><ul>${why.map(c => `<li
     ],
     body: `<div class="legal" style="max-width:980px"><h1>${esc(title)}</h1>
 <p class="muted">ISO week ${esc(s.isoWeek)} · readings captured ${esc(s.capturedAt)} (${esc(etTime(s.capturedAt))}) · XRPL ledger ~${esc(s.ledgerIndex)} · XRP/USD ${usd(s.xrpUsd, 4)}</p>
-<p class="notice"><b>Automated readings, not advice.</b> This page is a frozen copy of the <b>legacy worst-check labels</b> (OK / WARN / CRITICAL) as saved on this date. Those words are not rewritten to the live comparison menu. A WARN here may be only an issuer control or a missing measurement. Trading volume was not recorded in this copy; the newest exchange page cannot be paged back to this week, so the number was not reconstructed. Live volume is on the <a href="/">home page</a>. It is not investment advice, not an audit, and not proof of reserves. See each token page for the current comparison, and the <a href="/methodology">methodology</a> for both models.</p>
+<p class="notice"><b>Automated readings, not advice.</b> This page is a frozen copy of the <b>legacy worst-check labels</b> (OK / WARN / CRITICAL) as saved on this date. Those words are not rewritten to the live comparison menu. A WARN here may be only an issuer control or a missing measurement. Trading volume was not recorded in this copy; the newest exchange page cannot be paged back to this week, so the number was not reconstructed. Chain counts were not in this copy and were not reconstructed. Live volume and the chain comparison are on the <a href="/">home page</a> and the <a href="/chains">chains page</a>. It is not investment advice, not an audit, and not proof of reserves. See each token page for the current comparison, and the <a href="/methodology">methodology</a> for both models.</p>
 ${s.notes?.length ? `<h2>Context for this snapshot</h2><ul>${s.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
 <h2>At a glance</h2>
 <p>We tracked <b>${s.tokens.length}</b> commodity tokens: <b>${count('critical')}</b> ${badge('critical')}, <b>${count('warn')}</b> ${badge('warn')}, <b>${count('ok')}</b> ${badge('ok')}.</p>
@@ -1096,6 +1217,11 @@ const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
     more: '<a href="/methodology">Methodology</a> · <a href="/">Market activity</a>',
   },
   {
+    q: 'How are other chains counted?',
+    a: `The chains page counts commodity tokens only. Dollar stables are not included. The XRP Ledger reuses ReserveWatch's own readings. Ethereum, Base, Arbitrum, and Avalanche use a maintained list of tokenized gold and silver, one primary chain each. Market value is that chain's supply times the token price, not a headline market cap and not a vault value. A stated ounce or gram whose price is more than 5× from spot is not measured. 7-day volume on XRPL is on-ledger. Elsewhere it is CoinGecko's traded volume across the venues it tracks, including centralized venues, assigned to the primary chain. Holders are counted on XRPL only. Solana and Stellar are not enumerated. A missing figure is not measured, not zero. Nothing on that page is a health grade.`,
+    more: '<a href="/chains">Chains</a> · <a href="/methodology">Methodology</a>',
+  },
+  {
     q: 'How should I cite /api/tokens?',
     a: `The dataset at ${SITE_URL}/api/tokens is free JSON and free to cite. Attribute "${SITE_NAME}" and link that URL, or the page a reading came from. Per-token JSON is ${SITE_URL}/api/tokens/{id}, using the id from that token's page address. Cache responses. Acceptable use is described on the terms page. Do not describe the labels as an audit, proof of reserves, a credit rating, or investment advice. Readings can be delayed, incomplete, or wrong. Confirm with the issuer and an independent explorer.`,
     more: '<a href="/api/tokens">/api/tokens</a> · <a href="/terms">Terms of use</a> · <a href="/disclaimer">Disclaimer</a>',
@@ -1169,6 +1295,11 @@ app.get('/sitemap.xml', (_q, r) => {
 });
 app.use(express.static(PUBLIC_DIR, { maxAge: '7d', index: false }));
 app.get('/', (_q, r) => { r.send(listPage()); });
+app.get('/chains', (_q, r) => { r.send(chainsPage()); });
+app.get('/api/chains', (_q, r) => {
+  if (!snap?.chainGrowth) return void r.status(503).json({ error: 'no chain reading yet' });
+  r.json(snap.chainGrowth);
+});
 app.get('/token/:id', (q, r) => {
   const t = snap?.tokens.find(x => x.id === q.params.id);
   if (!t) {

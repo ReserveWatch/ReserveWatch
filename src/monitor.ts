@@ -2,6 +2,7 @@ import { dropsToXrp } from 'xrpl';
 import type { IndustryActivity, TokenActivity } from './volume.js';
 import { req, isTransient } from './xrplClient.js';
 import { getSpot, type SpotQuote } from './spot.js';
+import type { ChainGrowth } from './chains.js';
 import { TOKENS, RLUSD, USDV, QUOTE_ASSETS, type QuoteAsset, GRAMS_PER_TROY_OZ, commodityMeta, type TokenDef, type Commodity } from './config/tokens.js';
 
 export type Severity = 'ok' | 'warn' | 'critical';
@@ -51,6 +52,8 @@ export interface Snapshot {
   updatedAt: string; xrpUsd: number | null; xrpUsdSource: string; tokens: TokenReport[]; durationMs: number;
   /** Industry total for the same volume pass. Additive; older clients ignore it. */
   marketActivity?: IndustryActivity;
+  /** Multi-chain commodity counts. Additive; older clients ignore it. Not a health grade. */
+  chainGrowth?: ChainGrowth;
 }
 
 export const LOW_LIQ_USD = Number(process.env.LOW_LIQUIDITY_USD || 10000);

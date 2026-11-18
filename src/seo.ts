@@ -127,6 +127,8 @@ export function llmsTxt(): string {
 
 ${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity. The live pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
 
+Commodity tokens by chain are at ${abs('/chains')}: issuers, token counts, XRPL holders, market value (that chain's supply × token price), and 7-day volume. Dollar stables are excluded. Other chains are a maintained list of tokenized gold and silver on one primary network each, not a health grade. A price more than 5× from spot for a stated ounce or gram is not measured. Off-XRPL volume is CoinGecko's all-venue traded volume, not that chain's DEX alone. Solana and Stellar are not enumerated. A missing figure is not measured, not zero.
+
 7-day trading volume counts DEX fills and AMM swaps against XRP, RLUSD, and USDV, from XRPL Meta's exchange index of public ledger history. Row size is the quote amount and row price is quote per token; dollars are the quote amount times the quote's USD price (current XRP/USD, or $1 for RLUSD and USDV). A fill more than 5× from spot, where a spot price per token exists, is left out, and a week those fills dominate is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks. Those stables are quote assets, not commodity tokens. A cut-off window is not measured, not zero. Volume is not a health label and not a buy or sell signal.
 
 ## What ${SITE_NAME} is not
@@ -143,6 +145,7 @@ ${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a c
 - [Learn](${abs('/learn')}): plain-language explainers.
 ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
 - [Commodities](${abs('/commodities')}): asset classes on the XRP Ledger, including classes with no public issuer tracked yet.
+- [Chains](${abs('/chains')}): commodity-token issuers, counts, market value, and 7-day volume by chain. Not a health grade off the XRP Ledger.
 - [Weekly snapshots](${abs('/snapshots')}): frozen weekly copies of the automated checks. Each week: ${abs('/snapshots')}/{YYYY-MM-DD}.
 - [Briefs](${abs('/briefs')}): short dated notes when a new commodity issuer appears or a CRITICAL / soft-label situation is worth documenting. Each brief: ${abs('/briefs')}/{slug}.
 - [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
@@ -166,6 +169,7 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },
+    { loc: abs('/chains'), lastmod: '2026-11-18', changefreq: 'daily', priority: '0.8' },
     ...CLASS_PAGES.map(c => ({ loc: abs(`/commodities/${c.slug}`), lastmod: legalDate, changefreq: 'weekly', priority: '0.7' })),
     { loc: abs('/methodology'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/about'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },
