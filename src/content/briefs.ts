@@ -42,9 +42,9 @@ export const BRIEFS: Brief[] = [
   {
     slug: '2026-11-05-unverified-gold-rmeld',
     date: '2026-11-05',
-    title: 'Unverified GOLD (issuer rMELD…) stays CRITICAL',
+    title: 'Unverified GOLD stays CRITICAL',
     description:
-      'ReserveWatch brief: the XRPL GOLD token from issuer rMELD… remains CRITICAL as an Unverified listing. On-ledger Domain points at meld.gold, but Meld’s published token list does not include this issuer. Soft label facts only — not an allegation, not advice.',
+      'The unverified XRPL GOLD listing stayed CRITICAL on 5 Nov 2026. The domain and the project list disagree. Not an allegation, and not advice.',
     kind: 'soft-label',
     tokenIds: ['unlisted-gold-rmeld'],
     summary:

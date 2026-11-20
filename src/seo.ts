@@ -18,7 +18,8 @@ export const OG_IMAGE_PATH = '/og-share.png';
 export const OG_IMAGE_W = 1200;
 export const OG_IMAGE_H = 630;
 export const DEFAULT_DESCRIPTION =
-  'Compare XRPL commodity tokens by issuer controls, liquidity, and public verification. Measured facts, issuer features, and information gaps are separate from active problems. Not a buy or sell rating.';
+  'Compare XRPL commodity tokens by issuer controls, liquidity, and public checks. Not a buy or sell rating.';
+export const DATA_LICENSE_PATH = '/license';
 
 const escAttr = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 export const abs = (p: string) => SITE_URL + (p.startsWith('/') ? p : '/' + p);
@@ -90,6 +91,7 @@ export function snapshotsDatasetLd() {
     name: 'ReserveWatch weekly XRPL commodity token snapshots',
     description: 'Frozen weekly copies of automated XRP Ledger readings for tracked commodity tokens. Legacy OK, WARN, and CRITICAL labels are the worst raw check from that week. They are not rewritten later, and they are not audits or proof of reserves.',
     url: abs('/snapshots'), isAccessibleForFree: true, inLanguage: 'en',
+    license: abs(DATA_LICENSE_PATH),
     creator: { '@id': SITE_URL + '/#organization' },
     distribution: SNAPSHOTS.map(s => ({ '@type': 'DataDownload', encodingFormat: 'text/html', contentUrl: abs(`/snapshots/${s.week}`) })),
   };
@@ -101,6 +103,7 @@ export const datasetLd = (updatedAt?: string) => ({
   name: 'XRPL commodity token on-ledger health readings',
   description: 'Automated readings of public XRP Ledger data for commodity tokens (gold, silver, platinum, energy, diamonds and other classes as issuers appear): circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
+  license: abs(DATA_LICENSE_PATH),
   keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
   creator: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
   ...(updatedAt ? { dateModified: updatedAt } : {}),
@@ -216,6 +219,7 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/faq'), lastmod: '2026-11-18', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/privacy'), lastmod: legalDate, changefreq: 'monthly', priority: '0.4' },
     { loc: abs('/disclaimer'), lastmod: '2026-11-06', changefreq: 'yearly', priority: '0.3' },
+    { loc: abs(DATA_LICENSE_PATH), lastmod: '2026-11-20', changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/terms'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/contact'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/llms.txt'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.3' },
