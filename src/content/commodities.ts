@@ -132,9 +132,9 @@ export const CLASS_PAGES: ClassPage[] = [
   },
   {
     slug: 'diamonds', noun: 'diamond', codes: ['DIAMOND'],
-    title: 'Tokenized Diamonds on the XRP Ledger (XRPL): Diamond Token Checks · ReserveWatch',
+    title: 'How diamond tokenization works on XRPL · ReserveWatch',
     h1: 'Tokenized diamonds on the XRP Ledger',
-    description: 'Diamond tokens on the XRP Ledger, including Ctrl Alt diamond collections: what they represent, why there is no spot price, and live checks of supply, holders, clawback and freeze.',
+    description: 'How diamond tokenization works: a diamond token is a ledger record of a stone or a collection, not the stone. See the diamond tokens tracked on XRPL.',
     what: 'Every diamond is different (cut, colour, clarity, carat), so there is no single diamond price the way there is for gold. A diamond token usually represents a share of a certified stone or a collection of stones held by a custodian. Its value depends on the appraisal and on whether holders can sell or redeem.',
     pricing: NO_SPOT('diamond', 'stone or collection'),
     xrplStatus: '<p>The XRP Ledger hosts the Ctrl Alt × Billiton Diamond collections (reported at over $280M of certified polished diamonds, CoinDesk, February 3, 2026). They are <b>represented</b> assets: each collection\u2019s supply sat in a single inventory account, and wider investor distribution was reported as subject to Dubai VARA approval. ReserveWatch reads them from the ledger and labels them <span class="pill">Issuer link unconfirmed</span> because the issuer\u2019s website publishes no <code>xrp-ledger.toml</code> confirming the account. A single dominant holder is expected for these, not a warning sign by itself.</p>',

@@ -1008,6 +1008,7 @@ function commodityPage(c: ClassPage) {
   const classFaqs = defs.length ? [
     { q: `Which ${meta.name} tokens does ReserveWatch track on the XRP Ledger?`, a: `As of the latest reading, the tracked ${meta.name} tokens are ${names}. Each has its own page with issuer controls, liquidity, and, where a price can be read, 7-day volume.` },
     { q: `Does an XRPL ${meta.name} token prove the commodity is in a vault?`, a: `No. On-ledger supply counts tokens. It does not show that a physical commodity exists. ReserveWatch does not audit vaults, and a measured reading is not a buy or sell rating.` },
+    ...(c.slug === 'diamonds' ? [{ q: 'How does diamond tokenization work?', a: 'A diamond token is a record on a ledger that says it stands for a certified stone, or a share of a collection of stones. The ledger can show how many tokens exist and who holds them. It does not show that a stone is in a vault, and ReserveWatch does not check that.' }] : []),
   ] : [];
   const qs = [
     'Who is the issuer, and does its own website publish an <code>xrp-ledger.toml</code> that lists the issuer account?',
@@ -1028,6 +1029,7 @@ function commodityPage(c: ClassPage) {
     ],
     body: `<div class="legal legal-wide"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
 ${defs.length ? `<p class="answer">As of ${esc(readingDay())}, ReserveWatch tracks ${defs.length} ${esc(meta.name)} token${defs.length === 1 ? '' : 's'} on the XRP Ledger: ${esc(names)}. The figures below are public ledger readings, not a buy or sell list.</p>` : ''}
+${c.slug === 'diamonds' ? `<h2>How does diamond tokenization work?</h2><p>A diamond token is a record on a ledger that says it stands for a certified stone, or a share of a collection of stones. The ledger can show how many tokens exist and who holds them. It does not show that a stone is in a vault, and ReserveWatch does not check that.</p>` : ''}
 <p class="notice"><b>Automated ledger readings, not advice.</b> ReserveWatch is not an audit, not proof of reserves and not investment advice. It does not tell anyone to buy, sell or hold a token.</p>
 <h2>What is a tokenized ${esc(c.noun ?? classLabel(c))} token?</h2><p>${c.what}</p>
 <h2>How price is compared</h2><p>${c.pricing}</p>
@@ -1201,8 +1203,9 @@ app.use((q, r, next) => {
   const host = q.hostname;
   if ((q.method === 'GET' || q.method === 'HEAD') && (host === 'reservewatch.fly.dev' || host === 'www.' + CANONICAL_HOST)
     && q.path !== '/healthz' && !q.path.startsWith('/api/')) return void r.redirect(301, SITE_URL + q.originalUrl);
-  // Keep raw JSON / health endpoints out of search results.
-  if (q.path.startsWith('/api/') || q.path === '/healthz') r.set('X-Robots-Tag', 'noindex');
+  // Keep the JSON and CSV API out of Google's index. Do not Disallow /api/ in robots.txt:
+  // AI crawlers and llms.txt still need to fetch the data. noindex only asks search engines not to list it.
+  if (q.path === '/api' || q.path.startsWith('/api/') || q.path === '/healthz') r.set('X-Robots-Tag', 'noindex');
   next();
 });
 app.get('/robots.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt()); });
@@ -1349,9 +1352,14 @@ app.post('/api/refresh', async (q, r) => {
   await refresh(); r.json({ ok: !lastError, updatedAt: snap?.updatedAt });
 });
 
-app.listen(PORT, () => {
-  console.log(`[server] http://localhost:${PORT}  (poll every ${POLL_SEC}s)`);
-  void attachVolume(true);
-  refresh();
-  setInterval(refresh, POLL_SEC * 1000);
-});
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (entry === fileURLToPath(import.meta.url)) {
+  app.listen(PORT, () => {
+    console.log(`[server] http://localhost:${PORT}  (poll every ${POLL_SEC}s)`);
+    void attachVolume(true);
+    refresh();
+    setInterval(refresh, POLL_SEC * 1000);
+  });
+}
+
+export { app };
