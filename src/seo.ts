@@ -1,6 +1,7 @@
 // Lightweight on-site SEO helpers for ReserveWatch: canonical URLs, meta/OG/Twitter tags,
 // JSON-LD, robots.txt and sitemap.xml. No dependencies; everything is server-rendered strings.
 import { TOKENS } from './config/tokens.js';
+import { loadNewsSeed, newsDays } from './content/news.js';
 import { SNAPSHOTS } from './content/snapshots.js';
 import { CLASS_PAGES } from './content/commodities.js';
 import { LEARN_GUIDES } from './content/learn.js';
@@ -211,6 +212,9 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/alerts'), lastmod: liveDate, changefreq: 'daily', priority: '0.5' },
     { loc: abs('/snapshots'), lastmod: SNAPSHOTS[0]?.week ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...SNAPSHOTS.map(s => ({ loc: abs(`/snapshots/${s.week}`), lastmod: s.week, changefreq: 'yearly', priority: '0.5' })),
+    { loc: abs('/news'), lastmod: newsDays(loadNewsSeed())[0]?.date ?? legalDate, changefreq: 'daily', priority: '0.7' },
+    { loc: abs('/news/archive'), lastmod: newsDays(loadNewsSeed())[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.5' },
+    ...newsDays(loadNewsSeed()).map(d => ({ loc: abs(`/news/${d.date}`), lastmod: d.date, changefreq: 'yearly' as const, priority: '0.5' })),
     { loc: abs('/briefs'), lastmod: BRIEFS[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...BRIEFS.map(b => ({ loc: abs(`/briefs/${b.slug}`), lastmod: b.date, changefreq: 'yearly', priority: '0.5' })),
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },

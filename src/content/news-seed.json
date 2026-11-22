@@ -1,0 +1,42 @@
+[
+  {
+    "id": "paxgy-aave-collateral",
+    "date": "2026-11-19",
+    "headline": "Paxos Labs says PAXGy can be supplied as collateral on Aave",
+    "source": "Paxos Labs",
+    "url": "https://www.paxoslabs.com/posts/borrow-against-your-gold-on-aave",
+    "summary": "Paxos Labs said PAXGy, a token backed by PAX Gold, is listed on Aave so a holder can supply it and borrow against it. ReserveWatch has not checked the listing or the gold."
+  },
+  {
+    "id": "tether-coinw-xaut-yield",
+    "date": "2026-11-16",
+    "headline": "The Block reports a Tether and CoinW gold-yield offer paid in XAUT",
+    "source": "The Block",
+    "url": "https://www.theblock.co/collaborative-interviews/2026-11-16-tether-and-coinw-tokenized-gold-yield-438483",
+    "summary": "The Block reported that Tether and CoinW announced savings products that pay a stated yield in Tether Gold. The figure is the companies' offer, not a ReserveWatch measurement."
+  },
+  {
+    "id": "tether-gold-kpmg-audit",
+    "date": "2026-11-12",
+    "headline": "Tether says KPMG audited the company that issues Tether Gold",
+    "source": "Tether",
+    "url": "https://tether.io/news/tether-gold-xaut-becomes-tethers-second-stablecoin-to-complete-a-big-four-audit/",
+    "summary": "Tether said KPMG U.S. completed an audit of TG Commodities, the issuer of Tether Gold, for the year ended 31 December 2025. ReserveWatch did not perform that audit and does not confirm the gold."
+  },
+  {
+    "id": "paxg-on-base",
+    "date": "2026-11-06",
+    "headline": "Paxos says PAXG is live on Base",
+    "source": "Paxos",
+    "url": "https://www.paxos.com/blog/paxg-launches-on-base-bringing-regulated-gold-to-borrowers-on-coinbase",
+    "summary": "Paxos said its Pax Gold token is available on Base and may later be used as collateral in Coinbase Borrow. That is the issuer's statement, not a ReserveWatch check of the gold."
+  },
+  {
+    "id": "tether-gold-q3-reserves",
+    "date": "2026-11-04",
+    "headline": "Tether says Tether Gold reserves were worth $3.44 billion at quarter end",
+    "source": "Tether",
+    "url": "https://tether.io/news/tether-gold-reserves-grow-59-since-year-end-as-xaut-backing-reaches-record-us-3-44-billion/",
+    "summary": "Tether said that on 30 September 2026 the gold backing Tether Gold was worth $3.44 billion, and that each token stood for one fine troy ounce. ReserveWatch has not verified the bars."
+  }
+]

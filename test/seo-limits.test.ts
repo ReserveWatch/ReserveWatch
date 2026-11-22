@@ -7,6 +7,7 @@ import { CLASS_PAGES } from '../src/content/commodities.ts';
 import { LEARN_GUIDES } from '../src/content/learn.ts';
 import { SNAPSHOTS } from '../src/content/snapshots.ts';
 import { TOKENS } from '../src/config/tokens.ts';
+import { loadNewsSeed, newsDays } from '../src/content/news.ts';
 import { app } from '../src/server.ts';
 
 const decode = (s: string) => s
@@ -23,6 +24,7 @@ function meta(html: string) {
 
 const paths = [
   '/', '/commodities', '/state', '/alerts', '/methodology', '/faq', '/about', '/independent',
+  '/news', '/news/archive', ...newsDays(loadNewsSeed()).map(d => `/news/${d.date}`),
   '/disclaimer', '/terms', '/contact', '/privacy', '/license', '/snapshots', '/briefs', '/learn',
   '/learn/clawback-freeze-trust-lines',
   ...['gold', 'silver', 'platinum', 'energy', 'diamonds', 'palladium', 'oil', 'natural-gas', 'uranium', 'copper', 'timber', 'wheat', 'soybeans', 'corn', 'cotton', 'agriculture', 'other'].map(slug => {
