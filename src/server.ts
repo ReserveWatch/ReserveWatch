@@ -245,13 +245,13 @@ main{padding-top:24px}
 
 interface PageOpts extends SeoMeta { body: string; /** Auto-refresh live-data pages for open browser tabs. */ refresh?: boolean }
 const page = (o: PageOpts) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-${o.refresh ? '<meta http-equiv="refresh" content="60">' : ''}${seoHead(o)}<meta name="theme-color" content="#0B1F33">
+${o.refresh ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}${seoHead(o)}<meta name="theme-color" content="#0B1F33">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
 <header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
 <p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Ledger: ${esc(endpointList()[0])}.</p></div></footer></body></html>`;
 
@@ -300,7 +300,7 @@ function marketActivityHtml(): string {
 function listPage() {
   const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
   return page({
-    title: 'Compare XRPL Commodity Tokens: Controls, Liquidity, Verification · ReserveWatch',
+    title: 'Compare XRPL commodity tokens · ReserveWatch',
     description: DEFAULT_DESCRIPTION, path: '/', refresh: true,
     jsonLd: [orgLd(CONTACT_EMAIL), websiteLd(), datasetLd(snap?.updatedAt)],
     body: `<div class="mast"><h1>Compare XRPL commodity tokens</h1>
@@ -354,9 +354,8 @@ function homeAnswer(): string {
   return `<p class="answer">${esc(stateAnswer(summary))}</p>${citeLine('/', snap.updatedAt)}`;
 }
 type TokenMeta = { id: string; name: string; displayCode: string; metal: string };
-const tokenTitle = (t: TokenMeta) => `${t.name}${t.name.includes(t.displayCode) ? '' : ` (${t.displayCode})`} on XRPL — controls, liquidity, verification · ReserveWatch`;
-const priceVsSpotPhrase = (t: TokenMeta) => commodityMeta(t.metal).spotSymbol ? 'price vs spot' : 'on-ledger price';
-const tokenDescription = (t: TokenMeta) => `Compare ${t.name} (${t.displayCode}), a ${METAL_NAME[t.metal] ?? t.metal} token on the XRP Ledger: issuer controls, AMM liquidity, ${priceVsSpotPhrase(t)} and public verification. Measured facts are not a safety rating. Not investment advice.`;
+const tokenTitle = (t: TokenMeta) => `${t.displayCode} on XRPL · ReserveWatch`;
+const tokenDescription = (t: TokenMeta) => `${t.displayCode} (${METAL_NAME[t.metal] ?? t.metal}) on XRPL: supply, holders, issuer controls, and liquidity. Not a rating or proof of reserves.`;
 
 function tokenPage(t: TokenReport) {
   const flagRows = ['globalFreeze', 'noFreeze', 'allowTrustLineClawback', 'requireAuthorization', 'disableMasterKey', 'defaultRipple', 'depositAuth']
@@ -623,7 +622,7 @@ const INDEPENDENT = () => `
 <li><a href="/about">About ${SITE_NAME}</a> — what we watch and how to reach us.</li>
 </ul>`;
 
-const INDEPENDENT_DESC = 'ReserveWatch is an independent XRPL commodity reserve health monitor: not a custodian, not an issuer, not a vault auditor, and not investment advice. What that means, in plain language.';
+const INDEPENDENT_DESC = 'ReserveWatch is not a custodian, issuer, or vault auditor, and it is not investment advice.';
 
 const infoPage = (title: string, h1: string, path: string, description: string, html: string, updated = LEGAL_UPDATED) => page({
   title, description, path, ogType: 'article',
@@ -676,11 +675,8 @@ const SEV_ORDER: Severity[] = ['critical', 'warn', 'ok'];
 const snapNo = (s: WeeklySnapshot) => SNAPSHOTS.length - SNAPSHOTS.indexOf(s);
 const snapQuotes = (s: WeeklySnapshot) => s.quoteAssets ?? ['XRP', 'RLUSD'];
 const orList = (xs: string[]) => xs.length > 1 ? `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}` : xs.join('');
-const snapTitle = (s: WeeklySnapshot) => `XRPL Commodity Token Ledger Snapshot #${snapNo(s)} — ${longDate(s.week)} · ReserveWatch`;
-const snapDescription = (s: WeeklySnapshot) => {
-  const c = (v: Severity) => s.tokens.filter(t => t.status === v).length;
-  return `Ledger snapshot #${snapNo(s)}: on-ledger health readings for ${s.tokens.length} commodity tokens on the XRP Ledger (${longDate(s.week)}): ${c('critical')} CRITICAL, ${c('warn')} WARN, ${c('ok')} OK, with the reasons, liquidity and peg readings. Automated data, not advice.`;
-};
+const snapTitle = (s: WeeklySnapshot) => `XRPL snapshot ${s.week} · ReserveWatch`;
+const snapDescription = (s: WeeklySnapshot) => `Frozen XRPL commodity-token readings for ${s.week}: labels, supply, and liquidity. Not rewritten later. Not advice.`;
 
 function snapshotHighlights(s: WeeklySnapshot): string[] {
   const names = (ts: SnapToken[]) => ts.map(t => `<a href="/token/${esc(t.id)}">${esc(t.name)}</a>`).join(', ');
@@ -801,8 +797,8 @@ function snapshotsIndex() {
     return `<li><a href="${snapPath(s)}"><b>Snapshot #${snapNo(s)} — ${esc(longDate(s.week))}</b></a> <span class="muted">(${esc(s.isoWeek)})</span> — ${s.tokens.length} tokens: ${c('critical')} CRITICAL, ${c('warn')} WARN, ${c('ok')} OK</li>`;
   }).join('');
   return page({
-    title: 'Weekly XRPL Commodity Token Ledger Snapshots · ReserveWatch',
-    description: 'Archive of weekly on-ledger health snapshots for gold, silver, platinum and other commodity tokens on the XRP Ledger: labels, reasons, liquidity and peg readings, week by week. Not investment advice.',
+    title: 'Weekly XRPL snapshots · ReserveWatch',
+    description: 'Frozen weekly copies of XRPL commodity-token readings. Labels stay as published. Not rewritten later. Not advice.',
     path: '/snapshots', ogType: 'website',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Weekly snapshots', path: '/snapshots' }]), snapshotsDatasetLd()],
     body: `<div class="legal"><h1>Weekly ledger snapshots</h1>
@@ -869,8 +865,8 @@ ${g.body(ctx)}</div>` });
 
 function learnIndex() {
   return page({
-    title: 'Learn: XRPL Commodity Token Basics Explained · ReserveWatch',
-    description: 'Plain-language explainers on how gold, silver, energy, diamond and other commodity tokens work on the XRP Ledger: trust lines, freeze, clawback, peg vs spot and more. Not investment advice.',
+    title: 'XRPL token explainers · ReserveWatch',
+    description: 'Plain explainers for commodity tokens on the XRP Ledger: trust lines, freeze, clawback, and peg versus spot. Not advice.',
     path: '/learn',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Learn', path: '/learn' }])],
     body: `<div class="legal"><h1>Learn: XRPL commodity token basics</h1>
@@ -891,9 +887,9 @@ function clawbackPillar() {
   const rows = ts.map(t => `<tr><td>${link(t)}</td><td>${t.clawback ? '<b>on</b>' : 'off'}</td><td>${t.noFreeze ? 'yes (gave up freeze)' : 'no (can freeze)'}</td><td>${t.globalFreeze ? '<b>on</b>' : 'off'}</td><td>${fmt(t.frozenLines, 0)}</td><td>${t.requireAuth ? 'yes' : 'no'}</td></tr>`).join('');
   const path = '/learn/clawback-freeze-trust-lines';
   const h1 = 'Clawback, freeze and trust lines on XRPL: what they mean for metal tokens';
-  const description = 'Plain-language guide to trust lines, freeze, Global Freeze, NoFreeze and clawback on the XRP Ledger, and what each means if you hold a gold, silver, platinum or other commodity token. With live on-ledger flags. Not advice.';
+  const description = 'What clawback, freeze, and trust lines let an XRPL issuer do. A control is not a finding of wrongdoing. Not advice.';
   return page({
-    title: 'XRPL Clawback, Freeze & Trust Lines Explained for Gold Tokens · ReserveWatch', description, path, ogType: 'article',
+    title: 'Clawback and freeze on XRPL · ReserveWatch', description, path, ogType: 'article',
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Learn', path: '/learn' }, { name: 'Clawback, freeze and trust lines', path }]),
       { '@context': 'https://schema.org', '@type': 'Article', headline: h1, description, datePublished: '2026-10-30', dateModified: COMPARE_UPDATED_ISO,
@@ -971,8 +967,8 @@ function commoditiesIndex() {
     return `<h2>${esc(g.title)}</h2><ul>${items}</ul>`;
   }).join('');
   return page({
-    title: 'Tokenized Commodities on the XRP Ledger (XRPL): Every Asset Class · ReserveWatch',
-    description: 'Gold, silver, platinum, palladium, oil, natural gas, energy, uranium, copper, diamonds, timber and crop tokens on the XRP Ledger: which exist, which ReserveWatch tracks, and how each is checked.',
+    title: 'XRPL commodity classes · ReserveWatch',
+    description: 'Which commodity classes have a tracked XRPL token, and which do not. Public ledger readings. Not advice.',
     path: '/commodities',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }]),
       { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Tokenized commodities on the XRP Ledger', url: SITE_URL + '/commodities',
@@ -1008,6 +1004,7 @@ function commodityPage(c: ClassPage) {
   const classFaqs = defs.length ? [
     { q: `Which ${meta.name} tokens does ReserveWatch track on the XRP Ledger?`, a: `As of the latest reading, the tracked ${meta.name} tokens are ${names}. Each has its own page with issuer controls, liquidity, and, where a price can be read, 7-day volume.` },
     { q: `Does an XRPL ${meta.name} token prove the commodity is in a vault?`, a: `No. On-ledger supply counts tokens. It does not show that a physical commodity exists. ReserveWatch does not audit vaults, and a measured reading is not a buy or sell rating.` },
+    ...(c.slug === 'diamonds' ? [{ q: 'How does diamond tokenization work?', a: 'A diamond token is a record on a ledger that says it stands for a certified stone, or a share of a collection of stones. The ledger can show how many tokens exist and who holds them. It does not show that a stone is in a vault, and ReserveWatch does not check that.' }] : []),
   ] : [];
   const qs = [
     'Who is the issuer, and does its own website publish an <code>xrp-ledger.toml</code> that lists the issuer account?',
@@ -1028,6 +1025,7 @@ function commodityPage(c: ClassPage) {
     ],
     body: `<div class="legal legal-wide"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
 ${defs.length ? `<p class="answer">As of ${esc(readingDay())}, ReserveWatch tracks ${defs.length} ${esc(meta.name)} token${defs.length === 1 ? '' : 's'} on the XRP Ledger: ${esc(names)}. The figures below are public ledger readings, not a buy or sell list.</p>` : ''}
+${c.slug === 'diamonds' ? `<h2>How does diamond tokenization work?</h2><p>A diamond token is a record on a ledger that says it stands for a certified stone, or a share of a collection of stones. The ledger can show how many tokens exist and who holds them. It does not show that a stone is in a vault, and ReserveWatch does not check that.</p>` : ''}
 <p class="notice"><b>Automated ledger readings, not advice.</b> ReserveWatch is not an audit, not proof of reserves and not investment advice. It does not tell anyone to buy, sell or hold a token.</p>
 <h2>What is a tokenized ${esc(c.noun ?? classLabel(c))} token?</h2><p>${c.what}</p>
 <h2>How price is compared</h2><p>${c.pricing}</p>
@@ -1093,8 +1091,8 @@ function briefsIndex() {
     : `<p class="notice"><b>No briefs published yet.</b> When a new commodity issuer appears on the ledger, or a material CRITICAL / soft-label / peg situation is worth documenting, a short dated note will appear here. Weekly frozen readings stay on <a href="/snapshots">snapshots</a>; status transitions stay in the <a href="/alerts">alert log</a>.</p>
 <p class="muted">Editors: ${esc(HOW_TO_ADD)}</p>`;
   return page({
-    title: 'XRPL Commodity Token Briefs · ReserveWatch',
-    description: 'Short dated public briefs when a new XRPL commodity issuer appears or a CRITICAL / soft-label situation is worth documenting. Ledger facts only — not investment advice.',
+    title: 'XRPL token briefs · ReserveWatch',
+    description: 'Dated notes when a tracked XRPL commodity token changes. Ledger facts only. Not advice.',
     path: '/briefs',
     ogType: 'website',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Briefs', path: '/briefs' }])],
@@ -1153,9 +1151,9 @@ const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
 
 function faqPage() {
   const blocks = FAQ_BLOCKS();
-  const description = 'What ReserveWatch is and is not, how the comparison labels differ from the legacy OK / WARN / CRITICAL overall, why it is not a vault audit or proof of reserves, what unverified and unconfirmed issuer links mean, peg vs spot when liquidity is thin, and how to cite /api/tokens.';
+  const description = 'What ReserveWatch is, how labels differ from the legacy overall, and why readings are not a vault check. Not advice.';
   return page({
-    title: 'FAQ: What ReserveWatch Is, Health Labels, and How to Cite the Data · ReserveWatch',
+    title: 'ReserveWatch FAQ · ReserveWatch',
     description, path: '/faq', ogType: 'article',
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'FAQ', path: '/faq' }]),
@@ -1201,8 +1199,9 @@ app.use((q, r, next) => {
   const host = q.hostname;
   if ((q.method === 'GET' || q.method === 'HEAD') && (host === 'reservewatch.fly.dev' || host === 'www.' + CANONICAL_HOST)
     && q.path !== '/healthz' && !q.path.startsWith('/api/')) return void r.redirect(301, SITE_URL + q.originalUrl);
-  // Keep raw JSON / health endpoints out of search results.
-  if (q.path.startsWith('/api/') || q.path === '/healthz') r.set('X-Robots-Tag', 'noindex');
+  // Keep the JSON and CSV API out of Google's index. Do not Disallow /api/ in robots.txt:
+  // AI crawlers and llms.txt still need to fetch the data. noindex only asks search engines not to list it.
+  if (q.path === '/api' || q.path.startsWith('/api/') || q.path === '/healthz') r.set('X-Robots-Tag', 'noindex');
   next();
 });
 app.get('/robots.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt()); });
@@ -1237,16 +1236,16 @@ app.get('/token/:id', (q, r) => {
 app.get('/alerts', (_q, r) => {
   const rows = readAlerts().map(a => `<tr><td class="muted">${esc(a.at)}</td><td><a href="/token/${esc(a.tokenId)}">${esc(a.tokenId)}</a></td><td>${a.from ? badge(a.from) : 'new'} → ${badge(a.to)}</td><td>${a.reasons.map(esc).join('<br>')}</td></tr>`).join('');
   r.send(page({
-    title: 'XRPL Commodity Token Health Alert Log · ReserveWatch',
-    description: 'History of automated health-status changes (OK, WARN, CRITICAL) for gold, silver, platinum, energy, diamond and other commodity tokens on the XRP Ledger, with the on-ledger reasons for each change. Not investment advice.',
+    title: 'XRPL token alert log · ReserveWatch',
+    description: 'Log of legacy OK, WARN, and CRITICAL changes for tracked XRPL commodity tokens, with the raw-check reasons. Not advice.',
     path: '/alerts', refresh: true,
     body: `<h1>Health status alert log</h1><p class="muted">Alerts follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. The live comparison is on each token page. Labels are not reserves or solvency, and not buy or sell signals.</p><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table>` }));
 });
-app.get('/methodology', (_q, r) => { r.send(infoPage('How ReserveWatch Compares XRPL Commodity Tokens · ReserveWatch', 'Methodology: comparison labels and the legacy overall', '/methodology', 'How ReserveWatch separates measured liquidity and peg, issuer-control features, and unconfirmed or unmeasurable gaps from active problems. The legacy OK / WARN / CRITICAL overall is the worst raw check and is not rewritten. Not an audit or proof of reserves.', `<p class="answer">ReserveWatch separates measured facts, issuer features, and missing data from active problems. The legacy OK, WARN, or CRITICAL overall is the worst raw check. It is not a buy or sell rating and not proof of reserves.</p>${METHODOLOGY()}${citeLine('/methodology', COMPARE_UPDATED_ISO)}`, COMPARE_UPDATED)); });
+app.get('/methodology', (_q, r) => { r.send(infoPage('How readings are labeled · ReserveWatch', 'How readings are labeled', '/methodology', 'How measured facts, issuer controls, and missing data differ from active problems. Not a rating or proof of reserves.', `<p class="answer">ReserveWatch separates measured facts, issuer features, and missing data from active problems. The legacy OK, WARN, or CRITICAL overall is the worst raw check. It is not a buy or sell rating and not proof of reserves.</p>${METHODOLOGY()}${citeLine('/methodology', COMPARE_UPDATED_ISO)}`, COMPARE_UPDATED)); });
 app.get('/faq', (_q, r) => { r.send(faqPage()); });
-app.get('/about', (_q, r) => { r.send(infoPage('About ReserveWatch — Independent XRPL Commodity Token Monitor', 'About ReserveWatch', '/about', 'ReserveWatch is an independent, issuer-neutral monitor of commodity tokens on the XRP Ledger — gold, silver, platinum, energy, diamonds and more. It compares issuer controls, liquidity, and public verification. What it watches, what it does not do, and how to contact us.', ABOUT(), COMPARE_UPDATED)); });
+app.get('/about', (_q, r) => { r.send(infoPage('About ReserveWatch · ReserveWatch', 'About ReserveWatch', '/about', 'What ReserveWatch watches on the XRP Ledger, and what it does not do. Issuer-neutral public readings. Not advice.', ABOUT(), COMPARE_UPDATED)); });
 app.get('/independent', (_q, r) => { r.send(page({
-  title: 'Independent XRPL Commodity Monitor — Not a Custodian, Issuer or Auditor · ReserveWatch', description: INDEPENDENT_DESC, path: '/independent', ogType: 'article',
+  title: 'Independence · ReserveWatch', description: INDEPENDENT_DESC, path: '/independent', ogType: 'article',
   jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Independence', path: '/independent' }]), {
     '@context': 'https://schema.org', '@type': 'AboutPage', '@id': SITE_URL + '/independent#page', url: SITE_URL + '/independent',
     name: 'ReserveWatch independence statement', description: INDEPENDENT_DESC, inLanguage: 'en', dateModified: LEGAL_UPDATED_ISO,
@@ -1254,10 +1253,14 @@ app.get('/independent', (_q, r) => { r.send(page({
     significantLink: [SITE_URL + '/methodology', SITE_URL + '/disclaimer', SITE_URL + '/about'],
   }],
   body: `<div class="legal"><h1>Independent by design</h1><p class="muted">Last updated ${COMPARE_UPDATED}</p>${INDEPENDENT()}</div>` })); });
-app.get('/disclaimer', (_q, r) => { r.send(legalPage('Disclaimer', '/disclaimer', 'ReserveWatch publishes automated readings of public XRP Ledger data. It does not audit vaults or attest to reserves, and nothing on the site is investment, financial, legal or tax advice.', DISCLAIMER, COMPARE_UPDATED)); });
-app.get('/terms', (_q, r) => { r.send(legalPage('Terms of use', '/terms', 'Terms of use for the ReserveWatch website and public JSON API: informational service, no warranty, acceptable use and attribution.', TERMS)); });
-app.get('/contact', (_q, r) => { r.send(legalPage('Contact', '/contact', 'Contact ReserveWatch: issuer corrections and verification requests, data or bug reports, press and partnership inquiries.', CONTACT)); });
-app.get('/privacy', (_q, r) => { r.send(legalPage('Privacy policy', '/privacy', 'How ReserveWatch handles data: no accounts, wallets or login cookies; standard server logs; optional cookie-free aggregate analytics; no sale of personal data; how to make a privacy request.', PRIVACY())); });
+app.get('/disclaimer', (_q, r) => { r.send(legalPage('Disclaimer', '/disclaimer', 'ReserveWatch publishes public ledger readings. Not investment advice, and not a vault or audit check.', DISCLAIMER, COMPARE_UPDATED)); });
+app.get('/terms', (_q, r) => { r.send(legalPage('Terms of use', '/terms', 'Terms for the ReserveWatch site and JSON API. Informational service, no warranty, credit when you reuse a reading.', TERMS)); });
+app.get('/contact', (_q, r) => { r.send(legalPage('Contact', '/contact', 'Contact ReserveWatch about a correction, a data question, or a press inquiry.', CONTACT)); });
+app.get('/privacy', (_q, r) => { r.send(legalPage('Privacy', '/privacy', 'ReserveWatch has no accounts or login cookies. The host keeps ordinary server logs. Analytics are off.', PRIVACY())); });
+app.get('/license', (_q, r) => { r.send(legalPage('Data license', '/license', 'Cite and reuse ReserveWatch readings with credit and a link back. No warranty. Not investment advice.', `
+<p>ReserveWatch's published on-ledger facts and weekly snapshots may be cited and reused if you give a visible credit and a link back to <a href="https://thereservewatch.com">https://thereservewatch.com</a>.</p>
+<p>There is no warranty. The readings are not investment advice. They are not a claim that a physical vault or an audit was verified.</p>
+<p>This is ReserveWatch's own reuse note.</p>`)); });
 app.get('/snapshots', (_q, r) => { r.send(snapshotsIndex()); });
 app.get('/snapshots/:week', (q, r) => {
   const s = SNAPSHOTS.find(x => x.week === q.params.week);
@@ -1279,8 +1282,8 @@ function statePage() {
   ];
   const table = stateRows().map(row => `<tr><td><a href="/token/${esc(row.id)}">${esc(row.name)}</a></td><td>${esc(row.status.toUpperCase())}</td><td>${row.depthUsd == null ? 'not measured' : usd(row.depthUsd, 0)}</td><td>${row.volumeMeasured ? usd(row.volumeUsd, (row.volumeUsd ?? 0) >= 100 ? 0 : 2) : 'not measured'}</td></tr>`).join('');
   return page({
-    title: 'State of XRPL commodity tokens · ReserveWatch',
-    description: 'Current issuers, token count, AMM depth, 7-day volume, and legacy worst-check counts for commodity tokens on the XRP Ledger. Not a buy or sell rating and not proof of reserves.',
+    title: 'State of XRPL tokens · ReserveWatch',
+    description: 'Current XRPL commodity-token count, issuers, AMM depth, and 7-day volume. Not a rating or proof of reserves.',
     path: '/state', refresh: true,
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'State', path: '/state' }]),
@@ -1349,9 +1352,14 @@ app.post('/api/refresh', async (q, r) => {
   await refresh(); r.json({ ok: !lastError, updatedAt: snap?.updatedAt });
 });
 
-app.listen(PORT, () => {
-  console.log(`[server] http://localhost:${PORT}  (poll every ${POLL_SEC}s)`);
-  void attachVolume(true);
-  refresh();
-  setInterval(refresh, POLL_SEC * 1000);
-});
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (entry === fileURLToPath(import.meta.url)) {
+  app.listen(PORT, () => {
+    console.log(`[server] http://localhost:${PORT}  (poll every ${POLL_SEC}s)`);
+    void attachVolume(true);
+    refresh();
+    setInterval(refresh, POLL_SEC * 1000);
+  });
+}
+
+export { app };

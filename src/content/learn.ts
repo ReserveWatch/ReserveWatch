@@ -36,10 +36,10 @@ const pill = (t: string) => `<span class="pill">${t}</span>`;
 // ---------- 1. Peg vs spot ----------
 const PEG_VS_SPOT: LearnGuide = {
   slug: 'peg-vs-spot',
-  title: 'Peg vs Spot for XRPL Gold & Metal Tokens: How It Is Measured · ReserveWatch',
+  title: 'Peg vs spot on XRPL · ReserveWatch',
   h1: 'Peg vs spot: how ReserveWatch compares on-ledger prices with metal prices',
   crumb: 'Peg vs spot',
-  description: 'How ReserveWatch compares the on-ledger price of XRPL gold, silver and platinum tokens with spot metal prices: AMM pools in XRP, RLUSD and USDV, the ~$10k liquidity gate, and why non-metal tokens are "not measured". Not advice.',
+  description: 'How XRPL gold, silver, and platinum prices are compared with spot, and when a thin pool is not measured. Not advice.',
   blurb: 'How on-ledger prices are compared with spot, and when the number means something.',
   datePublished: '2026-10-31', dateModified: '2026-11-06',
   body: c => `<p class="notice"><b>Short version:</b> For gold, silver, platinum and palladium tokens, ReserveWatch compares two numbers: the <b>spot price</b> of the metal a token says it represents, and the <b>price the token trades at on the XRP Ledger</b>. The gap is the <b>peg deviation</b>. We only grade that gap when the token's AMM pools hold at least about $${n0(c.lowLiqUsd)}. A thin pool or no pool is <b>not measurable</b>, not a broken peg. A peg reading describes trading prices only. It is not proof that metal exists in a vault, and it is not a signal to buy or sell.</p>
@@ -89,10 +89,10 @@ ${c.liveTable ? `<h2>6. Live readings${c.asOf ? ` <span class="muted" style="fon
 // ---------- 2. Unverified listings / issuer link unconfirmed ----------
 const UNVERIFIED: LearnGuide = {
   slug: 'unverified-listings',
-  title: 'Unverified Listing & Issuer Link Unconfirmed: What the Labels Mean · ReserveWatch',
+  title: 'Unverified listing label · ReserveWatch',
   h1: '"Unverified listing" and "Issuer link unconfirmed": what the labels mean',
   crumb: 'Unverified listings',
-  description: 'What ReserveWatch means by "Unverified listing" and "Issuer link unconfirmed" on XRPL commodity tokens, how two-way domain and xrp-ledger.toml verification works, and what the labels do not mean. Not an allegation.',
+  description: 'What "Unverified listing" and "Issuer link unconfirmed" mean on XRPL, and what they do not mean. Not an allegation.',
   blurb: 'Two soft labels, what they mean, and what they do not mean.',
   datePublished: '2026-10-31', dateModified: '2026-11-06',
   body: c => `<p class="notice"><b>Short version:</b> On the XRP Ledger, anyone can create a token with any name. So ReserveWatch checks whether the project a token points to <b>confirms the issuer account itself</b>. A project list that leaves the account out is a <b>records conflict</b> (a prominent caution). A project that simply has not published a listing is <b>not confirmed</b>. Those are different. A label is a statement about what we could verify. It is <b>not</b> an accusation, and it says nothing about anyone's intentions or reserves.</p>
@@ -187,10 +187,10 @@ const glossaryQuestion = (term: string) => ({
 
 const GLOSSARY_GUIDE: LearnGuide = {
   slug: 'glossary',
-  title: 'XRPL Commodity Token Glossary: AMM TVL, Trust Lines, Clawback, toml · ReserveWatch',
+  title: 'XRPL token glossary · ReserveWatch',
   h1: 'Glossary: XRPL commodity token terms in plain words',
   crumb: 'Glossary',
-  description: 'Short, plain definitions of the terms ReserveWatch uses for XRPL commodity tokens: AMM TVL, circulating vs treasury supply, trust lines, clawback, freeze, Global Freeze, RequireAuth, xrp-ledger.toml, peg deviation and quote assets.',
+  description: 'Plain definitions for XRPL commodity-token terms: AMM depth, trust lines, clawback, freeze, and peg. Not advice.',
   blurb: 'Short, plain definitions of every term on ReserveWatch pages.',
   datePublished: '2026-10-31', dateModified: '2026-11-06',
   body: c => `<p class="notice">Plain definitions of the words ReserveWatch uses. These describe ledger settings and readings; none of them is investment advice, and none proves reserves. Measured does not mean safe.</p>

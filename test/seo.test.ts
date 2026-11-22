@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { XMLParser } from './xml-parser.ts';
-import { classPublicPath, llmsTxt, sitemapXml, tokenThingLd } from '../src/seo.ts';
+import { classPublicPath, datasetLd, llmsTxt, sitemapXml, snapshotsDatasetLd, tokenThingLd } from '../src/seo.ts';
 import { badgeEmbed, badgeSvg } from '../src/badge.ts';
 import { stateAnswer, summarizeState } from '../src/state.ts';
+
+test('Dataset JSON-LD names the public reuse page as its license', () => {
+  assert.equal(datasetLd().license, 'https://thereservewatch.com/license');
+  assert.equal(snapshotsDatasetLd().license, 'https://thereservewatch.com/license');
+  assert.ok(sitemapXml('2026-11-20', '2026-10-31').includes('https://thereservewatch.com/license'));
+});
 
 test('the sitemap is well-formed, dated, and lists short class URLs once', () => {
   const xml = sitemapXml('2026-11-18', '2026-10-31');
