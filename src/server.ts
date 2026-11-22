@@ -11,13 +11,13 @@ import { CLASS_PAGES, GROUPS, type ClassPage } from './content/commodities.js';
 import { SNAPSHOTS, type WeeklySnapshot, type SnapToken } from './content/snapshots.js';
 import { BRIEFS, HOW_TO_ADD, type Brief } from './content/briefs.js';
 import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './content/learn.js';
-import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, tokenThingLd, snapshotsDatasetLd, classPublicPath, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, type SeoMeta } from './seo.js';
+import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, tokenThingLd, snapshotsDatasetLd, classPublicPath, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, OG_IMAGE_PATH, type SeoMeta } from './seo.js';
 import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
 import { renderDetailLead, renderHomeCard } from './face.js';
 import { activityPlain, industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
 import { stateAnswer, summarizeState, type StateToken } from './state.js';
 import { badgeEmbed, badgeSvg } from './badge.js';
-import { dayNeighbors, latestNews, loadNewsSeed, newsDays, newsItemPath, newsMonths, type NewsDay } from './content/news.js';
+import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, newsAnchor, newsByTag, newsDayTitle, newsDays, newsItemPath, newsLongDay, newsMonDay, newsMonths, newsRss, newsTagTitle, newsWeek, newsWeekTitle, NEWS_ARCHIVE_TITLE, NEWS_INDEX_TITLE, NEWS_TAGS, snapshotPath, weekItems, type NewsFile, type NewsItem, type NewsTag } from './content/news.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -25,8 +25,8 @@ const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
 // Static brand assets (logo, favicons). Resolved relative to this file so it works from src/ (tsx) and dist/ (node).
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL || 'peakacademiccoaching1@gmail.com';
 const SITE_NAME = 'ReserveWatch';
-const LEGAL_UPDATED = 'October 31, 2026';
-const LEGAL_UPDATED_ISO = '2026-10-31';
+const LEGAL_UPDATED = 'November 22, 2026';
+const LEGAL_UPDATED_ISO = '2026-11-22';
 /** Explanatory copy for the comparison menu (methodology, FAQ, about). Legal pages that did not change keep LEGAL_UPDATED. */
 const COMPARE_UPDATED = 'November 6, 2026';
 const COMPARE_UPDATED_ISO = '2026-11-06';
@@ -226,12 +226,15 @@ footer nav a{font-weight:650;text-decoration:none}
 .answer{margin:0 0 14px;max-width:46rem;font-size:1.05rem;line-height:1.45;color:var(--rw-navy)}
 .cite{margin:14px 0 0;font-size:.82rem;color:var(--rw-muted)}
 .news-latest{margin:0 0 22px}
-.news-latest h2,.news-day h2{font-family:var(--sans);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--rw-gold-ink);margin:0 0 8px;font-weight:750}
-.news-latest ul,.news-index{list-style:none;margin:0;padding:0}
-.news-latest li,.news-index li{margin:0 0 10px}
-.news-latest .meta,.news-index .meta{display:block;color:var(--rw-muted);font-size:.85rem}
-.news-signup{margin:18px 0;padding:12px 14px;border:1px solid var(--rw-border);border-radius:12px;background:var(--rw-card)}
-.news-signup p{margin:8px 0 0;color:var(--rw-muted);font-size:.9rem}
+.news-latest ul{list-style:none;margin:0;padding:0}
+.news-latest li{margin:0 0 8px}
+.news-item{border-top:1px solid var(--rw-border);padding:12px 0}
+.news-item h2,.news-item h3{margin:0 0 6px;font-size:1.15rem}
+.news-item p{margin:0 0 8px}
+.tag{color:var(--rw-gold-ink);font-weight:650;text-decoration:none}
+.news-tags{display:flex;flex-wrap:wrap;gap:8px 14px;margin:0 0 14px}
+.news-signup{margin:14px 0;padding:12px 14px;border:1px solid var(--rw-border);border-radius:12px}
+.news-signup p{margin:8px 0 0}
 .spark{display:block}
 .spark rect{fill:var(--rw-navy)}
 @media(max-width:720px){
@@ -257,9 +260,9 @@ ${o.refresh ? '<script>setTimeout(function(){location.reload()},60000)</script>'
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/news">News</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/news">News</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
 <p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Ledger: ${esc(endpointList()[0])}.</p></div></footer></body></html>`;
 
@@ -357,65 +360,126 @@ function stateRows(): StateToken[] {
     volumeMeasured: !!(t.activity?.measured && t.activity.usdPriced && t.activity.recent.complete),
   }));
 }
+const NEWS_LINE = 'Short summaries of tokenized-commodity news, written by ReserveWatch. Every item links to its source.';
+const NEWS_FOOT = '<p><a href="/disclaimer">Summaries of public reporting. Not investment advice, not an audit, not proof of reserves.</a></p>';
+const newsOrg = { '@id': SITE_URL + '/#organization' };
+function newsMissing(urlPath: string, message: string): string {
+  return page({ title: 'Not found · ReserveWatch', description: 'This page does not exist on ReserveWatch.', path: urlPath, noindex: true, body: `<h1>Not found</h1><p>${esc(message)} <a href="/news">See the news</a>.</p>` });
+}
+function ledgerLabel(href: string): string {
+  if (href.startsWith('/token/')) return TOKENS.find(t => t.id === href.slice('/token/'.length))?.displayCode || href.slice('/token/'.length);
+  if (href.startsWith('/snapshots/')) return href.slice('/snapshots/'.length);
+  const slug = href.replace(/^\/commodities\//, '').replace(/^\//, '');
+  return CLASS_PAGES.find(c => c.slug === slug)?.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, '') || href;
+}
+function newsCard(item: NewsItem, level: 'h2' | 'h3'): string {
+  const tags = item.tags.map(tag => `<a class="tag" href="/news/tag/${esc(tag)}">#${esc(tag)}</a>`).join(' · ');
+  const see = item.ledgerLinks.length ? ` · See: ${item.ledgerLinks.map(href => `<a href="${esc(href)}">${esc(ledgerLabel(href))}</a>`).join(', ')}` : '';
+  const corrected = item.correction ? `<p>Corrected ${esc(newsLongDay(item.correction.date))}: ${esc(item.correction.text)}</p>` : '';
+  return `<article class="news-item" id="${esc(newsAnchor(item))}"><${level}>${esc(item.headline)}</${level}><p>${esc(item.summary)}</p><p><strong>Why it matters:</strong> ${esc(item.whyItMatters)}</p><p>Source: <a rel="noopener" href="${esc(item.source.url)}">${esc(item.source.name)}</a> · ${esc(newsLongDay(item.date))} · ${tags}${see}</p>${corrected}</article>`;
+}
+function newsArticleLd(item: NewsItem) {
+  return {
+    '@type': 'NewsArticle', headline: item.headline, description: item.summary, datePublished: item.publishedAt,
+    dateModified: item.correction?.date ?? item.publishedAt, url: SITE_URL + newsItemPath(item), author: newsOrg, publisher: newsOrg,
+    isBasedOn: item.source.url, citation: item.confirmedBy.map(c => c.url), about: item.tags, isAccessibleForFree: true, inLanguage: 'en', image: SITE_URL + OG_IMAGE_PATH,
+  };
+}
+function newsListLd(urls: string[]) {
+  return { '@context': 'https://schema.org', '@type': 'CollectionPage', mainEntity: { '@type': 'ItemList', itemListElement: urls.map((url, i) => ({ '@type': 'ListItem', position: i + 1, url })) } };
+}
 function latestNewsHtml(): string {
-  const items = latestNews(loadNewsSeed(), 3);
+  const items = latestNews(loadNews(), 3);
   if (!items.length) return '';
-  const rows = items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a><span class="meta">${esc(item.date)} · ${esc(item.source)}</span></li>`).join('');
+  const rows = items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a><span class="meta">${esc(item.date)} · ${esc(item.source.name)}</span></li>`).join('');
   return `<section class="news-latest" aria-label="Latest news"><h2>Latest news</h2><ul>${rows}</ul><p><a href="/news">All news</a></p></section>`;
 }
 function newsSignupHtml(): string {
-  const key = process.env.KIT_API_KEY?.trim();
-  const form = process.env.KIT_FORM_ID?.trim();
-  if (!key || !form || !/^[A-Za-z0-9_-]+$/.test(form)) return '';
-  return `<form class="news-signup" method="post" action="https://app.kit.com/forms/${esc(form)}/subscriptions"><label>Email <input type="email" name="email_address" required autocomplete="email"></label> <button type="submit">Subscribe</button><p>Weekly, free. Unsubscribe anytime. We'll ask you to confirm.</p></form>`;
+  const action = process.env.NEWSLETTER_FORM_ACTION?.trim();
+  const name = process.env.NEWSLETTER_NAME?.trim();
+  if (!action || !name) return '';
+  return `<form class="news-signup" method="post" action="${esc(action)}" name="${esc(name)}"><label>Email <input type="email" name="email_address" required autocomplete="email"></label> <button type="submit">Get the Friday email</button><p>Weekly, free. Unsubscribe anytime. We'll ask you to confirm.</p></form>`;
 }
 function newsIndexPage(): string {
-  const days = newsDays(loadNewsSeed());
-  const list = days.map(day => `<li><a href="/news/${esc(day.date)}"><b>${esc(longDate(day.date))}</b></a><ul>${day.items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a> <span class="meta">${esc(item.source)}</span></li>`).join('')}</ul></li>`).join('');
+  const doc = loadNews();
+  const days = newsDays(doc).slice(0, 10);
+  const week = [...doc.weeks].sort((a, b) => a.date < b.date ? 1 : -1)[0];
+  const tags = NEWS_TAGS.map(tag => `<a class="tag" href="/news/tag/${tag}">#${tag}</a>`).join('');
+  const prefix = days[0] ? `${newsMonDay(days[0].date)}: ` : '';
   return page({
-    title: 'Commodity token news · ReserveWatch',
-    description: 'Dated reports on tokenized commodities, with the source named. Not investment advice.',
-    path: '/news',
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }])],
-    body: `<div class="legal"><h1>Commodity token news</h1>
-<p class="answer">Reports on tokenized commodities, with the source named. These are not ReserveWatch measurements and not a reason to buy or sell.</p>
+    title: NEWS_INDEX_TITLE,
+    description: describeHeadlines(prefix, days.flatMap(day => day.items.map(item => item.headline))),
+    path: '/news', rss: true,
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }]), newsListLd(days.flatMap(day => day.items.map(item => SITE_URL + newsItemPath(item))))],
+    body: `<div class="legal"><h1>Tokenized commodities news</h1>
+<p class="answer">${NEWS_LINE}</p>
+<nav class="news-tags" aria-label="Tags">${tags}</nav>
 ${newsSignupHtml()}
-${list ? `<ul class="news-index">${list}</ul>` : '<p>No news has been published yet.</p>'}
-<p><a href="/news/archive">News archive</a></p>
-${citeLine('/news')}</div>`,
+${days.map(day => `<h2>${esc(newsLongDay(day.date))}</h2>${day.items.map(item => newsCard(item, 'h3')).join('')}`).join('') || '<p>No news has been published yet.</p>'}
+<p>${week ? `<a href="/news/week/${esc(week.week)}">Weekly roundups</a> · ` : ''}<a href="/news/archive">News archive</a></p>
+${NEWS_FOOT}</div>`,
   });
 }
-function newsArchivePage(): string {
-  const months = newsMonths(newsDays(loadNewsSeed()));
-  const body = months.map(month => `<h2>${esc(month.label)}</h2><ul>${month.days.map(day => `<li><a href="/news/${esc(day.date)}">${esc(longDate(day.date))}</a> <span class="muted">${day.items.length} report${day.items.length === 1 ? '' : 's'}</span></li>`).join('')}</ul>`).join('');
+function newsArchivePage(doc: NewsFile): string {
+  const days = newsDays(doc);
+  const months = newsMonths(doc);
+  const body = months.map(month => `<h2>${esc(month.label)}</h2><ul>${month.days.map(day => `<li><a href="/news/${esc(day.date)}">${esc(newsLongDay(day.date))}</a></li>`).join('')}</ul>`).join('');
   return page({
-    title: 'News archive · ReserveWatch',
-    description: 'Every published day of ReserveWatch commodity-token news, newest first. Not advice.',
-    path: '/news/archive',
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: 'Archive', path: '/news/archive' }])],
-    body: `<div class="legal"><h1>News archive</h1>
-<p class="answer">Every day that has been published stays here.</p>
-${body || '<p>No news has been published yet.</p>'}
-<p><a href="/news">Latest news</a></p>
-${citeLine('/news/archive')}</div>`,
+    title: NEWS_ARCHIVE_TITLE,
+    description: describeHeadlines(days[0] ? `${newsMonDay(days[0].date)}: ` : '', days.flatMap(day => day.items.map(item => item.headline))),
+    path: '/news/archive', rss: true,
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: 'Archive', path: '/news/archive' }]), newsListLd(days.map(day => SITE_URL + `/news/${day.date}`))],
+    body: `<div class="legal"><h1>Tokenized commodities news archive</h1><p class="answer">${NEWS_LINE}</p>${body || '<p>No news has been published yet.</p>'}${NEWS_FOOT}</div>`,
   });
 }
-function newsDayPage(day: NewsDay, days: NewsDay[]): string {
-  const { prev, next } = dayNeighbors(days, day.date);
-  const items = day.items.map(item => `<article id="${esc(item.id)}"><h2>${esc(item.headline)}</h2><p class="meta">${esc(item.source)} · <a href="${esc(item.url)}">${esc(item.url)}</a></p><p>${esc(item.summary)}</p></article>`).join('');
-  const nav = `<p>${prev ? `<a href="/news/${esc(prev)}">Previous day</a>` : ''}${prev && next ? ' · ' : ''}${next ? `<a href="/news/${esc(next)}">Next day</a>` : ''}</p>`;
+function newsDayPage(doc: NewsFile, date: string): string {
+  const days = newsDays(doc);
+  const day = days.find(entry => entry.date === date)!;
+  const { prev, next } = dayNeighbors(days, date);
+  const nav = `${prev ? `<a href="/news/${esc(prev)}">Previous day</a>` : ''}${prev && next ? ' · ' : ''}${next ? `<a href="/news/${esc(next)}">Next day</a>` : ''}`;
   return page({
-    title: `News ${day.date} · ReserveWatch`,
-    description: `Tokenized-commodity reports for ${day.date}. Sources are named. Not investment advice.`,
-    path: `/news/${day.date}`,
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: day.date, path: `/news/${day.date}` }])],
-    body: `<div class="legal news-day"><p class="crumb"><a href="/news">News</a></p><h1>${esc(longDate(day.date))}</h1>
-<p class="answer">What was reported on this day. ReserveWatch did not check the underlying gold, silver, or other commodity.</p>
-${nav}
-${items}
-${nav}
-<p><a href="/news/archive">News archive</a></p>
-${citeLine('/news/' + day.date, day.date)}</div>`,
+    title: newsDayTitle(date),
+    description: describeHeadlines(`${newsMonDay(date)}: `, day.items.map(item => item.headline)),
+    path: `/news/${date}`, ogType: 'article', rss: true,
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: newsLongDay(date), path: `/news/${date}` }]),
+      { '@context': 'https://schema.org', '@type': 'CollectionPage', url: `${SITE_URL}/news/${date}`, mainEntity: { '@type': 'ItemList', itemListElement: day.items.map((item, i) => ({ '@type': 'ListItem', position: i + 1, item: newsArticleLd(item) })) } },
+    ],
+    body: `<div class="legal"><h1>${esc(newsDayTitle(date).replace(/ · ReserveWatch$/, ''))}</h1><p class="answer">${NEWS_LINE}</p>${nav ? `<p>${nav}</p>` : ''}${day.items.map(item => newsCard(item, 'h2')).join('')}${nav ? `<p>${nav}</p>` : ''}${newsSignupHtml()}${NEWS_FOOT}</div>`,
+  });
+}
+function newsWeekPage(doc: NewsFile, id: string): string | null {
+  const week = newsWeek(id, doc);
+  if (!week) return null;
+  const items = weekItems(week, doc);
+  const shot = snapshotPath(week);
+  const h1 = newsWeekTitle(week.week).replace(/ · ReserveWatch$/, '');
+  return page({
+    title: newsWeekTitle(week.week),
+    description: clipAtWord(`${week.title}. ${week.intro}`),
+    path: `/news/week/${week.week}`, ogType: 'article', rss: true,
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: h1, path: `/news/week/${week.week}` }]),
+      { '@context': 'https://schema.org', '@type': 'NewsArticle', headline: h1, description: clipAtWord(`${week.title}. ${week.intro}`), datePublished: week.date, author: newsOrg, publisher: newsOrg, hasPart: items.map(item => ({ '@type': 'NewsArticle', headline: item.headline, url: SITE_URL + newsItemPath(item) })), ...(shot ? { isBasedOn: SITE_URL + shot } : {}), isAccessibleForFree: true, inLanguage: 'en', image: SITE_URL + OG_IMAGE_PATH },
+    ],
+    body: `<div class="legal"><h1>${esc(h1)}</h1><p class="answer">${esc(week.intro)}</p>${items.map(item => `<article class="news-item"><h2><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a></h2><p>${esc(item.summary)}</p><p>Source: <a rel="noopener" href="${esc(item.source.url)}">${esc(item.source.name)}</a></p></article>`).join('')}<h2>On the ledger this week</h2><ul>${week.ledgerNotes.map(note => `<li>${esc(note)}</li>`).join('')}</ul>${shot ? `<p><a href="${esc(shot)}">Ledger snapshot ${esc(week.snapshot)}</a></p>` : ''}${newsSignupHtml()}${NEWS_FOOT}</div>`,
+  });
+}
+function newsTagPage(doc: NewsFile, tag: string, pageNo: number): string | null {
+  if (!(NEWS_TAGS as readonly string[]).includes(tag) || !Number.isInteger(pageNo) || pageNo < 1) return null;
+  const all = newsByTag(tag, doc);
+  const pages = Math.max(1, Math.ceil(all.length / 30));
+  if (pageNo > pages) return null;
+  const slice = all.slice((pageNo - 1) * 30, pageNo * 30);
+  const urlPath = pageNo > 1 ? `/news/tag/${tag}?page=${pageNo}` : `/news/tag/${tag}`;
+  const title = newsTagTitle(tag as NewsTag);
+  const h1 = title.replace(/ · ReserveWatch$/, '');
+  const pager = `${pageNo > 1 ? `<a href="${pageNo === 2 ? `/news/tag/${tag}` : `/news/tag/${tag}?page=${pageNo - 1}`}">Previous page</a>` : ''}${pageNo > 1 && pageNo < pages ? ' · ' : ''}${pageNo < pages ? `<a href="/news/tag/${tag}?page=${pageNo + 1}">Next page</a>` : ''}`;
+  return page({
+    title, description: describeHeadlines(`${h1}: `, slice.map(item => item.headline)), path: urlPath,
+    noindex: all.length < 5, canonical: true, rss: true,
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: h1, path: `/news/tag/${tag}` }]), newsListLd(slice.map(item => SITE_URL + newsItemPath(item)))],
+    body: `<div class="legal"><h1>${esc(h1)}</h1><p class="answer">${NEWS_LINE}</p>${slice.map(item => newsCard(item, 'h3')).join('') || '<p>No items with this tag yet.</p>'}${pager ? `<p>${pager}</p>` : ''}${NEWS_FOOT}</div>`,
   });
 }
 function homeAnswer(): string {
@@ -701,7 +765,7 @@ const infoPage = (title: string, h1: string, path: string, description: string, 
 
 // ---------- Privacy (honest description of what the site actually does) ----------
 const PRIVACY = () => `
-<p class="notice"><b>Short version:</b> ${SITE_NAME} has no accounts, no wallets, no sign-up and no login cookies. Our host keeps normal server logs. ${PLAUSIBLE_DOMAIN ? 'We count page views in aggregate with Plausible Analytics, which uses no cookies.' : 'Website analytics are currently <b>off</b>.'} We do not sell personal data.</p>
+<p class="notice"><b>Short version:</b> ${SITE_NAME} has no accounts, no wallets, and no login cookies. Our host keeps normal server logs. ${PLAUSIBLE_DOMAIN ? 'We count page views in aggregate with Plausible Analytics, which uses no cookies.' : 'Website analytics are currently <b>off</b>.'} We do not sell personal data.</p>
 
 <h2>What this site is</h2>
 <p>${SITE_NAME} is a public, read-only website and JSON API that shows automated readings of public XRP Ledger data for commodity tokens. You do not need an account. We never ask for wallet seeds, private keys, or payments, and we do not set cookies to log anyone in.</p>
@@ -712,6 +776,9 @@ const PRIVACY = () => `
 <li><b>Public API use.</b> Requests to <a href="/api/tokens">/api/tokens</a> are logged the same way. No API key is required, so we do not know who you are unless you tell us.</li>
 <li><b>Email.</b> If you write to us, we receive your email address and message and use them only to reply.</li>
 </ul>
+
+<h2>Weekly email (optional)</h2>
+<p>If you subscribe, your email address is stored by our email provider Kit (ConvertKit) to send the weekly digest, with double opt-in. We don't sell it. Unsubscribe from any email or write to <a href="mailto:josh@thereservewatch.com">josh@thereservewatch.com</a>.</p>
 
 <h2>Analytics</h2>
 ${PLAUSIBLE_DOMAIN
@@ -1344,13 +1411,32 @@ app.get('/briefs/:slug', (q, r) => {
   r.send(briefPage(b));
 });
 app.get('/news', (_q, r) => { r.send(newsIndexPage()); });
-app.get('/news/archive', (_q, r) => { r.send(newsArchivePage()); });
-app.get('/news/:date', (q, r) => {
-  const days = newsDays(loadNewsSeed());
-  const day = days.find(d => d.date === q.params.date);
-  if (!day) return void r.status(404).send(page({ title: 'Not found · ReserveWatch', description: 'This page does not exist on ReserveWatch.', path: q.path, noindex: true, body: '<h1>Not found</h1><p>No news for that day. <a href="/news">See the news</a>.</p>' }));
-  r.send(newsDayPage(day, days));
+app.get('/news/feed.xml', (_q, r) => {
+  r.set('Content-Type', 'application/rss+xml; charset=utf-8');
+  r.set('Cache-Control', 'public, max-age=3600');
+  r.send(newsRss(loadNews(), SITE_URL));
 });
+app.get('/news/archive', (_q, r) => { r.send(newsArchivePage(loadNews())); });
+app.get('/news/week/:week', (q, r) => {
+  const html = newsWeekPage(loadNews(), String(q.params.week));
+  if (!html) return void r.status(404).send(newsMissing(q.path, 'No roundup for that week.'));
+  r.send(html);
+});
+app.get('/news/tag/:tag', (q, r) => {
+  const raw = Array.isArray(q.query.page) ? q.query.page[0] : q.query.page;
+  const pageNo = raw == null || raw === '' ? 1 : Number(raw);
+  const html = newsTagPage(loadNews(), String(q.params.tag), pageNo);
+  if (!html) return void r.status(404).send(newsMissing(q.path, 'No news for that tag.'));
+  r.send(html);
+});
+app.get('/news/:date', (q, r, next) => {
+  const date = String(q.params.date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return next();
+  const doc = loadNews();
+  if (!newsDays(doc).some(day => day.date === date)) return void r.status(404).send(newsMissing(q.path, 'No news for that day.'));
+  r.send(newsDayPage(doc, date));
+});
+app.get('/api/news', (_q, r) => { r.json(loadNews()); });
 app.get('/commodities', (_q, r) => { r.send(commoditiesIndex()); });
 function statePage() {
   const summary = summarizeState(stateRows(), snap?.updatedAt ?? new Date().toISOString(), snap?.marketActivity);

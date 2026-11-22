@@ -1,7 +1,7 @@
 // Lightweight on-site SEO helpers for ReserveWatch: canonical URLs, meta/OG/Twitter tags,
 // JSON-LD, robots.txt and sitemap.xml. No dependencies; everything is server-rendered strings.
 import { TOKENS } from './config/tokens.js';
-import { loadNewsSeed, newsDays } from './content/news.js';
+import { loadNews, NEWS_TAGS, newsByTag, newsDays, type NewsFile } from './content/news.js';
 import { SNAPSHOTS } from './content/snapshots.js';
 import { CLASS_PAGES } from './content/commodities.js';
 import { LEARN_GUIDES } from './content/learn.js';
@@ -33,6 +33,10 @@ export interface SeoMeta {
   path: string;
   ogType?: 'website' | 'article';
   noindex?: boolean;
+  /** Emit a canonical link even when the page is noindex (tag pages under five items). */
+  canonical?: boolean;
+  /** News pages link the RSS feed. */
+  rss?: boolean;
   jsonLd?: object[];
 }
 
@@ -41,9 +45,13 @@ export function seoHead(m: SeoMeta): string {
   const url = abs(m.path);
   const img = abs(OG_IMAGE_PATH);
   const ld = (m.jsonLd ?? []).map(o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`).join('');
+  const robots = m.noindex ? 'noindex,follow' : 'index,follow,max-image-preview:large';
+  const canonical = !m.noindex || m.canonical ? `<link rel="canonical" href="${escAttr(url)}">` : '';
+  const feed = m.rss ? '<link rel="alternate" type="application/rss+xml" title="ReserveWatch news" href="/news/feed.xml">' : '';
   return `<title>${escAttr(m.title)}</title>
 <meta name="description" content="${escAttr(m.description)}">
-${m.noindex ? '<meta name="robots" content="noindex,follow">' : `<link rel="canonical" href="${escAttr(url)}"><meta name="robots" content="index,follow,max-image-preview:large">`}
+${canonical}<meta name="robots" content="${robots}">
+${feed}
 <meta property="og:site_name" content="${SITE_NAME}"><meta property="og:type" content="${m.ogType ?? 'website'}"><meta property="og:locale" content="en_US">
 <meta property="og:title" content="${escAttr(m.title)}"><meta property="og:description" content="${escAttr(m.description)}"><meta property="og:url" content="${escAttr(url)}">
 <meta property="og:image" content="${img}"><meta property="og:image:width" content="${OG_IMAGE_W}"><meta property="og:image:height" content="${OG_IMAGE_H}"><meta property="og:image:type" content="image/png"><meta property="og:image:alt" content="${SITE_NAME} — ${TAGLINE}">
@@ -183,6 +191,7 @@ ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
 ${CLASS_PAGES.filter(c => TOKENS.some(t => c.codes.includes(t.metal))).map(c => `- [${c.h1}](${abs(classPublicPath(c.slug))}): tracked ${c.slug} tokens with live readings.`).join('\n')}
 - [Weekly snapshots](${abs('/snapshots')}): frozen weekly copies of the automated checks. Each week: ${abs('/snapshots')}/{YYYY-MM-DD}.
 - [Briefs](${abs('/briefs')}): short dated notes when a new commodity issuer appears or a CRITICAL / soft-label situation is worth documenting. Each brief: ${abs('/briefs')}/{slug}.
+News: /news (daily summaries with sources), RSS /news/feed.xml, JSON /api/news
 - [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
 - [Independence](${abs('/independent')}): not a custodian, issuer, vault auditor, or investment advice.
 - [Dataset JSON API](${abs('/api/tokens')}): free JSON readings (application/json). Free to cite.
@@ -199,7 +208,9 @@ Corrections: ${abs('/contact')}
 }
 
 /** Sitemap of key public URLs. `lastmod` = YYYY-MM-DD; live pages use the latest snapshot date. */
-export function sitemapXml(liveDate: string, legalDate: string): string {
+export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile = loadNews()): string {
+  const days = newsDays(news);
+  const newest = days[0]?.date ?? legalDate;
   const urls: { loc: string; lastmod: string; changefreq: string; priority: string }[] = [
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
@@ -212,9 +223,11 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/alerts'), lastmod: liveDate, changefreq: 'daily', priority: '0.5' },
     { loc: abs('/snapshots'), lastmod: SNAPSHOTS[0]?.week ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...SNAPSHOTS.map(s => ({ loc: abs(`/snapshots/${s.week}`), lastmod: s.week, changefreq: 'yearly', priority: '0.5' })),
-    { loc: abs('/news'), lastmod: newsDays(loadNewsSeed())[0]?.date ?? legalDate, changefreq: 'daily', priority: '0.7' },
-    { loc: abs('/news/archive'), lastmod: newsDays(loadNewsSeed())[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.5' },
-    ...newsDays(loadNewsSeed()).map(d => ({ loc: abs(`/news/${d.date}`), lastmod: d.date, changefreq: 'yearly' as const, priority: '0.5' })),
+    { loc: abs('/news'), lastmod: newest, changefreq: 'daily', priority: '0.7' },
+    { loc: abs('/news/archive'), lastmod: newest, changefreq: 'weekly', priority: '0.5' },
+    ...days.map(d => ({ loc: abs(`/news/${d.date}`), lastmod: d.date, changefreq: 'weekly', priority: '0.5' })),
+    ...[...news.weeks].sort((a, b) => a.date < b.date ? 1 : -1).map(w => ({ loc: abs(`/news/week/${w.week}`), lastmod: w.date, changefreq: 'weekly', priority: '0.6' })),
+    ...NEWS_TAGS.filter(tag => newsByTag(tag, news).length >= 5).map(tag => ({ loc: abs(`/news/tag/${tag}`), lastmod: newsByTag(tag, news)[0]?.date ?? newest, changefreq: 'weekly', priority: '0.4' })),
     { loc: abs('/briefs'), lastmod: BRIEFS[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...BRIEFS.map(b => ({ loc: abs(`/briefs/${b.slug}`), lastmod: b.date, changefreq: 'yearly', priority: '0.5' })),
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },
