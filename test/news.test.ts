@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { dayNeighbors, describeHeadlines, loadNews, newsDayTitle, newsDays, newsTagTitle, newsWeekTitle, resetNewsCacheForTests, validateNews, type NewsFile } from '../src/content/news.ts';
+import { SNAPSHOTS } from '../src/content/snapshots.ts';
 import { llmsTxt, sitemapXml } from '../src/seo.ts';
 import { app } from '../src/server.ts';
 import { XMLParser } from './xml-parser.ts';
@@ -157,10 +158,18 @@ test('news pages, the feed, the archive, the homepage, and IndexNow', async () =
     const week = await get('/news/week/2026-W47');
     assert.match(week.html, /<title>Week 47 tokenized commodities roundup · ReserveWatch<\/title>/);
     assert.match(week.html, /On the ledger this week/);
-    assert.equal(week.html.includes('/snapshots/2026-11-19'), false);
-    const weekLd = JSON.stringify(jsonLd(week.html));
+    const weekBlocks = jsonLd(week.html);
+    const weekLd = JSON.stringify(weekBlocks);
     assert.match(weekLd, /hasPart/);
-    assert.equal(weekLd.includes('/snapshots/2026-11-19'), false);
+    const snapshotListed = SNAPSHOTS.some(s => s.week === '2026-11-19');
+    if (snapshotListed) {
+      assert.match(week.html, /href="\/snapshots\/2026-11-19"/);
+      const article = weekBlocks.find(block => (block as { '@type'?: string })['@type'] === 'NewsArticle') as { isBasedOn?: string };
+      assert.equal(article.isBasedOn, 'https://thereservewatch.com/snapshots/2026-11-19');
+    } else {
+      assert.equal(week.html.includes('/snapshots/2026-11-19'), false);
+      assert.equal(weekLd.includes('/snapshots/2026-11-19'), false);
+    }
 
     const tag = await get('/news/tag/gold');
     assert.match(tag.html, /<title>Tokenized gold news · ReserveWatch<\/title>/);
