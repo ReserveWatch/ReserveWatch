@@ -1,6 +1,8 @@
 // Append-only poll history and day-over-day change notes. A bad file never throws to the caller.
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { troyOz } from './ledgers/parse.js';
 
 export type HistoryLedger = 'xrpl' | 'solana' | 'stellar';
@@ -110,13 +112,16 @@ const FLAG_LABEL: Record<string, string> = {
 
 export function detectChanges(current: HistoryReading, priorPoints: DailyPoint[], threshold = supplyThreshold()): ChangeEvent[] {
   const events: ChangeEvent[] = [];
-  const prior = priorPoints[priorPoints.length - 1];
-  if (!prior) {
+  const points = priorPoints.filter(point => point && typeof point.day === 'string').sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : 0);
+  if (!points.length) {
     events.push({ at: current.at, ledger: current.ledger, tokenId: current.tokenId, kind: 'appeared', text: 'Token first seen in this history.' });
     return events;
   }
   const today = dayOf(current.at);
-  const yesterday = [...priorPoints].reverse().find(point => point.day < today);
+  // Compare with the latest stored day at or before this reading, so a late older day does not look like a first sighting.
+  const prior = [...points].reverse().find(point => point.day <= today);
+  if (!prior) return events;
+  const yesterday = [...points].reverse().find(point => point.day < today);
   const where = current.supplyOz != null ? `${fmt(current.supplyOz)} oz` : current.supply != null ? `${fmt(current.supply)} tokens` : 'an unmeasured supply';
   if (current.supply === 0 && prior.supply != null && prior.supply > 0) {
     events.push({ at: current.at, ledger: current.ledger, tokenId: current.tokenId, kind: 'zero', text: 'Supply is zero.' });
@@ -158,14 +163,92 @@ function remember(dir: string | undefined, events: ChangeEvent[], notify: AlertN
   const list = Array.isArray(prev.events) ? prev.events : [];
   const next = [...list, ...events].slice(-500);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ events: next }));
+  atomicWrite(file, JSON.stringify({ events: next }));
   for (const event of events) {
     try { void Promise.resolve(notify.notify(event)).catch(() => undefined); } catch { /* a notifier must not break the poll */ }
   }
 }
 
+function upsertDay(series: DailyPoint[], point: DailyPoint): DailyPoint[] {
+  const next = series.filter(item => item.day !== point.day);
+  next.push(point);
+  next.sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : 0);
+  return next.slice(-DAY_KEEP);
+}
+
+/** Replace the file only after the new bytes are on disk. A failed write leaves the previous file. */
+function atomicWrite(file: string, data: string | Buffer): void {
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(tmp, 'w', 0o644);
+    let off = 0;
+    while (off < buf.length) {
+      const n = fs.writeSync(fd, buf, off, buf.length - off);
+      if (n <= 0) throw new Error(`short write to ${tmp}`);
+      off += n;
+    }
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    if (fd != null) { try { fs.closeSync(fd); } catch { /* already closed */ } }
+    try { fs.unlinkSync(tmp); } catch { /* temp was not created */ }
+    throw err;
+  }
+}
+
+function rawKeepDays(): number {
+  const n = Number(process.env.HISTORY_RAW_DAYS ?? 90);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 90;
+}
+
+function shiftDay(day: string, delta: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return day;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + delta)).toISOString().slice(0, 10);
+}
+
+function gzipReplace(file: string): void {
+  const gzPath = `${file}.gz`;
+  const fresh = fs.readFileSync(file);
+  let payload = fresh;
+  if (fs.existsSync(gzPath)) {
+    try { payload = Buffer.concat([zlib.gunzipSync(fs.readFileSync(gzPath)), fresh]); }
+    catch (err) {
+      console.warn(`[history] gzip left ${path.basename(file)} in place: ${(err as Error).message}`);
+      return;
+    }
+  }
+  atomicWrite(gzPath, zlib.gzipSync(payload));
+  fs.unlinkSync(file);
+}
+
+/** Gzip poll logs older than two days and delete logs older than HISTORY_RAW_DAYS. The rollup stays. */
+function pruneRaw(dir: string | undefined, asOf: string): void {
+  const root = historyDir(dir);
+  let names: string[] = [];
+  try { names = fs.readdirSync(root); } catch { return; }
+  const today = dayOf(asOf);
+  const gzipBefore = shiftDay(today, -2);
+  const deleteBefore = shiftDay(today, -rawKeepDays());
+  for (const name of names) {
+    const match = /^(\d{4}-\d{2}-\d{2})\.ndjson(\.gz)?$/.exec(name);
+    if (!match) continue;
+    const full = path.join(root, name);
+    try {
+      if (match[1] < deleteBefore) fs.unlinkSync(full);
+      else if (!match[2] && match[1] < gzipBefore) gzipReplace(full);
+    } catch (err) {
+      console.warn(`[history] prune skipped ${name}: ${(err as Error).message}`);
+    }
+  }
+}
+
 /** Append this poll and fold it into the daily series. Returns the new change notes. */
-export function recordHistory(readings: HistoryReading[], opts: { dir?: string; threshold?: number; notify?: AlertNotifier } = {}): ChangeEvent[] {
+export function recordHistory(readings: HistoryReading[], opts: { dir?: string; threshold?: number; notify?: AlertNotifier; now?: string } = {}): ChangeEvent[] {
   try {
     const dir = opts.dir;
     fs.mkdirSync(historyDir(dir), { recursive: true });
@@ -175,21 +258,18 @@ export function recordHistory(readings: HistoryReading[], opts: { dir?: string; 
     for (const row of readings) {
       if (!row?.tokenId || !row.at) continue;
       const day = dayOf(row.at);
-      const line = JSON.stringify(row);
       const bucket = byDay.get(day) ?? [];
-      bucket.push(line);
+      bucket.push(JSON.stringify(row));
       byDay.set(day, bucket);
       const prior = Array.isArray(roll.tokens[row.tokenId]) ? roll.tokens[row.tokenId] : [];
-      events.push(...detectChanges(row, prior, opts.threshold));
-      const point = toPoint(row);
       const series = prior.filter(item => item && typeof item.day === 'string');
-      const last = series[series.length - 1];
-      const next = !last || last.day !== point.day ? [...series, point] : [...series.slice(0, -1), point];
-      roll.tokens[row.tokenId] = next.slice(-DAY_KEEP);
+      events.push(...detectChanges(row, series, opts.threshold));
+      roll.tokens[row.tokenId] = upsertDay(series, toPoint(row));
     }
-    for (const [day, lines] of byDay) fs.appendFileSync(dayFile(dir, day), lines.join('\n') + '\n');
-    fs.writeFileSync(rollupFile(dir), JSON.stringify(roll));
+    atomicWrite(rollupFile(dir), JSON.stringify(roll));
     remember(dir, events, opts.notify ?? notifier);
+    for (const [day, lines] of byDay) fs.appendFileSync(dayFile(dir, day), lines.join('\n') + '\n');
+    pruneRaw(dir, opts.now ?? new Date().toISOString());
     return events;
   } catch (err) {
     console.warn(`[history] record skipped: ${(err as Error).message}`);
@@ -249,7 +329,8 @@ function xml(s: string): string {
 export function eventsRss(events: ChangeEvent[], siteUrl: string, ledger?: string): string {
   const items = events.slice(-50).reverse().map(event => {
     const link = `${siteUrl}/token/${event.tokenId}`;
-    const guid = `${siteUrl}/alerts#${event.tokenId}-${event.at}-${event.kind}`;
+    const hash = createHash('sha256').update(event.text).digest('hex').slice(0, 8);
+    const guid = `${siteUrl}/alerts#${event.tokenId}-${event.at}-${event.kind}-${hash}`;
     const when = Number.isNaN(Date.parse(event.at)) ? event.at : new Date(event.at).toUTCString();
     return `<item><title>${xml(event.text)}</title><link>${xml(link)}</link><guid isPermaLink="false">${xml(guid)}</guid><pubDate>${xml(when)}</pubDate><description>${xml(event.text)}</description></item>`;
   }).join('');

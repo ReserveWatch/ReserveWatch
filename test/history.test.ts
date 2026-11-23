@@ -5,9 +5,10 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import zlib from 'node:zlib';
 import {
   eventsRss, futureKitNotifier, historySection, readEvents, readingFromChain, readingFromXrpl,
-  recordHistory, setAlertNotifier, tokenHistory, type HistoryReading,
+  recordHistory, setAlertNotifier, supplyThreshold, tokenHistory, type HistoryReading,
 } from '../src/history.ts';
 import { XMLParser } from './xml-parser.ts';
 
@@ -35,8 +36,9 @@ function row(over: Partial<HistoryReading> = {}): HistoryReading {
 
 test('polls append to the day file and roll up to one point per day', () => {
   const dir = tmp();
-  const first = recordHistory([row({ holders: 10 })], { dir });
-  const second = recordHistory([row({ at: '2026-11-01T18:00:00.000Z', holders: 12, supply: 101, supplyOz: 101 })], { dir });
+  const now = '2026-11-01T20:00:00.000Z';
+  const first = recordHistory([row({ holders: 10 })], { dir, now });
+  const second = recordHistory([row({ at: '2026-11-01T18:00:00.000Z', holders: 12, supply: 101, supplyOz: 101 })], { dir, now });
   const lines = fs.readFileSync(path.join(dir, 'history', '2026-11-01.ndjson'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 2);
   assert.equal(JSON.parse(lines[1]).holders, 12);
@@ -145,6 +147,103 @@ test('missing or corrupt history does not throw and the next poll still records'
   assert.match(html, /<table>/);
 });
 
+test('a late reading for an earlier day replaces that day', () => {
+  const dir = tmp();
+  const now = '2026-11-03T12:00:00.000Z';
+  recordHistory([row({ at: '2026-11-03T12:00:00.000Z', supply: 50, holders: 5 })], { dir, now, threshold: 100 });
+  const late = recordHistory([row({ at: '2026-11-01T12:00:00.000Z', supply: 40, holders: 4 })], { dir, now, threshold: 100 });
+  assert.equal(late.some(event => event.kind === 'appeared'), false);
+  const days = tokenHistory('solana-paxg', dir).days;
+  assert.deepEqual(days.map(point => [point.day, point.supply]), [['2026-11-01', 40], ['2026-11-03', 50]]);
+  recordHistory([row({ at: '2026-11-01T18:00:00.000Z', supply: 41, holders: 4 })], { dir, now, threshold: 100 });
+  const again = tokenHistory('solana-paxg', dir).days;
+  assert.equal(again.length, 2);
+  assert.equal(again[0].day, '2026-11-01');
+  assert.equal(again[0].supply, 41);
+});
+
+test('two control notes at one time get different RSS guids', () => {
+  const dir = tmp();
+  const at = '2026-11-01T12:00:00.000Z';
+  const flags = { mintAuthority: false, freeze: false, permanentDelegate: false, pause: false, paused: false };
+  recordHistory([row({ at, flags })], { dir, now: at, threshold: 100 });
+  recordHistory([row({ at, flags: { ...flags, mintAuthority: true, freeze: true } })], { dir, now: at, threshold: 100 });
+  const items = new XMLParser().parse(eventsRss(readEvents(dir), 'https://thereservewatch.com')).rss?.channel.item ?? [];
+  const controls = items.filter(item => /issuer control/.test(item.title));
+  assert.equal(controls.length, 2);
+  assert.equal(new Set(controls.map(item => item.guid)).size, 2);
+  assert.equal(new Set(items.map(item => item.guid)).size, items.length);
+});
+
+test('poll logs older than two days are gzipped and older logs are deleted', () => {
+  const dir = tmp();
+  const today = '2026-11-23';
+  const root = path.join(dir, 'history');
+  fs.mkdirSync(root);
+  const shift = (delta: number) => new Date(Date.UTC(2026, 10, 23 + delta)).toISOString().slice(0, 10);
+  const write = (delta: number, gz = false) => {
+    const day = shift(delta);
+    const body = `{"day":"${day}"}\n`;
+    fs.writeFileSync(path.join(root, `${day}.ndjson${gz ? '.gz' : ''}`), gz ? zlib.gzipSync(body) : body);
+  };
+  write(0);
+  write(-1);
+  write(-2);
+  write(-3);
+  write(-90);
+  write(-91);
+  write(-100, true);
+  fs.writeFileSync(path.join(root, 'daily.json'), '{"tokens":{"keep":[]}}');
+  recordHistory([row({ at: `${today}T12:00:00.000Z`, supply: 5 })], { dir, now: `${today}T12:00:00.000Z`, threshold: 100 });
+  assert.equal(fs.existsSync(path.join(root, `${shift(0)}.ndjson`)), true);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-1)}.ndjson`)), true);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-2)}.ndjson`)), true);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-3)}.ndjson`)), false);
+  assert.equal(zlib.gunzipSync(fs.readFileSync(path.join(root, `${shift(-3)}.ndjson.gz`))).toString(), `{"day":"${shift(-3)}"}\n`);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-90)}.ndjson.gz`)), true);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-91)}.ndjson`)), false);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-91)}.ndjson.gz`)), false);
+  assert.equal(fs.existsSync(path.join(root, `${shift(-100)}.ndjson.gz`)), false);
+  const roll = JSON.parse(fs.readFileSync(path.join(root, 'daily.json'), 'utf8')) as { tokens: { keep: unknown[]; 'solana-paxg': { supply: number }[] } };
+  assert.equal(roll.tokens['solana-paxg'][0].supply, 5);
+  assert.ok(roll.tokens.keep);
+  const prev = process.env.HISTORY_RAW_DAYS;
+  process.env.HISTORY_RAW_DAYS = '10';
+  try {
+    const short = tmp();
+    const shortRoot = path.join(short, 'history');
+    fs.mkdirSync(shortRoot);
+    fs.writeFileSync(path.join(shortRoot, `${shift(-10)}.ndjson`), '{"ok":1}\n');
+    fs.writeFileSync(path.join(shortRoot, `${shift(-11)}.ndjson`), '{"old":1}\n');
+    recordHistory([row({ at: `${today}T12:00:00.000Z` })], { dir: short, now: `${today}T12:00:00.000Z`, threshold: 100 });
+    assert.equal(fs.existsSync(path.join(shortRoot, `${shift(-10)}.ndjson.gz`)), true);
+    assert.equal(fs.existsSync(path.join(shortRoot, `${shift(-11)}.ndjson`)), false);
+    assert.equal(fs.existsSync(path.join(shortRoot, `${shift(-11)}.ndjson.gz`)), false);
+  } finally {
+    if (prev == null) delete process.env.HISTORY_RAW_DAYS;
+    else process.env.HISTORY_RAW_DAYS = prev;
+  }
+});
+
+test('a failed rollup write keeps the previous daily.json', () => {
+  const dir = tmp();
+  const now = '2026-11-01T12:00:00.000Z';
+  recordHistory([row({ holders: 3, supply: 10 })], { dir, now, threshold: 100 });
+  const root = path.join(dir, 'history');
+  const file = path.join(root, 'daily.json');
+  const before = fs.readFileSync(file, 'utf8');
+  fs.chmodSync(root, 0o555);
+  try {
+    const again = recordHistory([row({ at: '2026-11-01T18:00:00.000Z', holders: 9, supply: 99 })], { dir, now, threshold: 100 });
+    assert.deepEqual(again, []);
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+    assert.equal(tokenHistory('solana-paxg', dir).days[0].holders, 3);
+    assert.equal(fs.readdirSync(root).some(name => name.endsWith('.tmp')), false);
+  } finally {
+    fs.chmodSync(root, 0o755);
+  }
+});
+
 test('RSS is well formed, guids are unique, and a ledger query filters items', () => {
   const dir = tmp();
   recordHistory([
@@ -216,6 +315,7 @@ test('history pages and the feed stay up when the history file is missing or cor
     const alertsHtml = await alerts.text();
     assert.match(alertsHtml, /Legacy XRPL status log/);
     assert.match(alertsHtml, /\/alerts\/feed\.xml\?ledger=solana/);
+    assert.match(alertsHtml, new RegExp(`at least ${supplyThreshold()}% from the previous day`));
     const description = alertsHtml.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? '';
     assert.ok(description.length <= 155, description);
     const api = await get('/api/history/solana-paxg');

@@ -21,7 +21,7 @@ import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, news
 import { CHAIN_TOKENS, chainTokenById } from './ledgers/registry.js';
 import { readChainLedgers, supplyLabel, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, type ChainReading } from './ledgers/read.js';
 import { fmtNum, troyOz } from './ledgers/parse.js';
-import { eventsRss, historySection, readEvents, readingFromChain, readingFromXrpl, recordHistory, tokenHistory } from './history.js';
+import { eventsRss, historySection, readEvents, readingFromChain, readingFromXrpl, recordHistory, supplyThreshold, tokenHistory } from './history.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -1559,7 +1559,7 @@ app.get('/alerts', (_q, r) => {
     description: 'Supply, issuer-control, and peg-grade changes, plus the legacy XRPL status log. Not advice.',
     path: '/alerts', refresh: true,
     body: `<h1>Reading changes</h1>
-<p class="muted">A note is written when supply moves at least ${esc(String(process.env.HISTORY_SUPPLY_PCT || '5'))}% from the previous day, when an issuer control changes, when a graded peg moves from ok to warn or critical, or when a token is first seen or its supply is zero. Issuer controls are labeled as controls, not as events. This is not investment advice and not a vault check. Email is not sent.</p>
+<p class="muted">A note is written when supply moves at least ${esc(String(supplyThreshold()))}% from the previous day, when an issuer control changes, when a graded peg moves from ok to warn or critical, or when a token is first seen or its supply is zero. Issuer controls are labeled as controls, not as events. This is not investment advice and not a vault check. Email is not sent.</p>
 <p>RSS: <a href="/alerts/feed.xml">all ledgers</a> · <a href="/alerts/feed.xml?ledger=xrpl">XRPL</a> · <a href="/alerts/feed.xml?ledger=solana">Solana</a> · <a href="/alerts/feed.xml?ledger=stellar">Stellar</a></p>
 <div class="table-wrap"><table><tr><th>At</th><th>Token</th><th>Ledger</th><th>Note</th></tr>${changes || '<tr><td colspan="4" class="muted">No reading changes recorded yet.</td></tr>'}</table></div>
 <h2>Legacy XRPL status log</h2><p class="muted">These rows follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. Labels are not reserves or solvency, and not buy or sell signals.</p><div class="table-wrap"><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table></div>` }));
