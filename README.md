@@ -1,11 +1,11 @@
-# ReserveWatch — XRPL commodity reserve health monitor
+# ReserveWatch — On-chain reserve health for tokenized assets
 
 Source for [https://thereservewatch.com](https://thereservewatch.com).
 
 MVP — gold focus.
 
-Monitors gold / precious-metal tokens on the XRP Ledger using **public ledger data only**
-(xrpl.js over public WebSockets). No wallet, no seeds, no private keys — ever.
+Reads public ledger data for tokenized metals, diamonds, energy and other real-world assets on XRPL, Solana and Stellar.
+Public ledger data only (xrpl.js over public WebSockets for XRPL). No wallet, no seeds, no private keys — ever.
 
 ## Run
 

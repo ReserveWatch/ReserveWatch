@@ -1,4 +1,4 @@
-# Launch notes — XRPL Commodity-Token Health Monitor
+# Launch notes — On-chain reserve health for tokenized assets
 
 Status as of **Oct 28, 2026, 11:33 PM EDT** (last good `npm run check`, snapshot `2026-10-29T03:33:04Z`, 15 s, 5 tokens).
 

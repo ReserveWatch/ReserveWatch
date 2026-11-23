@@ -6,6 +6,8 @@ import { SNAPSHOTS } from './snapshots.js';
 
 export const NEWS_TAGS = ['gold', 'silver', 'platinum', 'energy', 'diamonds', 'regulation', 'xrpl', 'other-chains'] as const;
 export type NewsTag = (typeof NEWS_TAGS)[number];
+export const NEWS_LEDGERS = ['xrpl', 'solana', 'stellar', 'other'] as const;
+export type NewsLedger = (typeof NEWS_LEDGERS)[number];
 
 export interface NewsSource { name: string; url: string }
 export interface NewsCorrection { date: string; text: string }
@@ -21,6 +23,8 @@ export interface NewsItem {
   confirmedBy: { url: string }[];
   ledgerLinks: string[];
   correction: NewsCorrection | null;
+  /** Which ledgers the item is about. Omitted in old files; inferred from tags. */
+  ledgers: NewsLedger[];
 }
 export interface NewsWeek {
   week: string;
@@ -152,7 +156,18 @@ export function validateNews(raw: unknown, today = nyToday()): NewsFile {
       if (typeof correctionDate !== 'string' || !dayOk(correctionDate) || correctionDate > today) fail(`${id} has a bad correction date`);
       correction = { date: correctionDate, text: plain(correctionText, `${id} correction`, 420) };
     }
-    return { id, date, publishedAt, headline, summary, whyItMatters, tags, source: { name: sourceName, url: sourceUrl }, confirmedBy, ledgerLinks, correction };
+    const rawLedgers = (item as { ledgers?: unknown }).ledgers;
+    let ledgers: NewsLedger[];
+    if (rawLedgers == null) ledgers = tags.includes('xrpl') ? ['xrpl'] : ['other'];
+    else {
+      if (!Array.isArray(rawLedgers) || !rawLedgers.length) fail(`${id} ledgers must be a non-empty list when present`);
+      ledgers = [];
+      for (const name of rawLedgers) {
+        if (typeof name !== 'string' || !(NEWS_LEDGERS as readonly string[]).includes(name)) fail(`${id} has an unknown ledger`);
+        if (!ledgers.includes(name as NewsLedger)) ledgers.push(name as NewsLedger);
+      }
+    }
+    return { id, date, publishedAt, headline, summary, whyItMatters, tags, source: { name: sourceName, url: sourceUrl }, confirmedBy, ledgerLinks, correction, ledgers };
   });
   const weeks = rawWeeks.map(row => {
     const week = row as Partial<NewsWeek>;
@@ -274,6 +289,10 @@ export function newsDays(doc: NewsFile = loadNews()): NewsDay[] {
 
 export function newsByTag(tag: string, doc: NewsFile = loadNews()): NewsItem[] {
   return newsDays(doc).flatMap(day => day.items).filter(item => item.tags.includes(tag as NewsTag));
+}
+
+export function newsByLedger(ledger: string, doc: NewsFile = loadNews()): NewsItem[] {
+  return newsDays(doc).flatMap(day => day.items).filter(item => item.ledgers.includes(ledger as NewsLedger));
 }
 
 export function newsWeek(week: string, doc: NewsFile = loadNews()): NewsWeek | null {

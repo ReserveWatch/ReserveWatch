@@ -1,7 +1,8 @@
 // Lightweight on-site SEO helpers for ReserveWatch: canonical URLs, meta/OG/Twitter tags,
 // JSON-LD, robots.txt and sitemap.xml. No dependencies; everything is server-rendered strings.
 import { TOKENS } from './config/tokens.js';
-import { loadNews, NEWS_TAGS, newsByTag, newsDays, type NewsFile } from './content/news.js';
+import { CHAIN_TOKENS } from './ledgers/registry.js';
+import { loadNews, NEWS_LEDGERS, NEWS_TAGS, newsByLedger, newsByTag, newsDays, type NewsFile } from './content/news.js';
 import { SNAPSHOTS } from './content/snapshots.js';
 import { CLASS_PAGES } from './content/commodities.js';
 import { LEARN_GUIDES } from './content/learn.js';
@@ -9,7 +10,7 @@ import { BRIEFS } from './content/briefs.js';
 
 export const SITE_URL = (process.env.SITE_URL || 'https://thereservewatch.com').replace(/\/+$/, '');
 export const SITE_NAME = 'ReserveWatch';
-export const TAGLINE = 'XRPL Commodity Reserve Health Monitor';
+export const TAGLINE = 'On-chain reserve health for tokenized assets';
 export const BRAND_NAVY = '#0B1F33';
 export const LOGO_PATH = '/logo.png';
 export const LOGO_W = 1200;
@@ -19,7 +20,7 @@ export const OG_IMAGE_PATH = '/og-share.png';
 export const OG_IMAGE_W = 1200;
 export const OG_IMAGE_H = 630;
 export const DEFAULT_DESCRIPTION =
-  'Compare XRPL commodity tokens by issuer controls, liquidity, and public checks. Not a buy or sell rating.';
+  'On-chain reserve health for tokenized assets on XRPL, Solana, and Stellar. Not a vault check or a buy or sell rating.';
 export const DATA_LICENSE_PATH = '/license';
 
 const escAttr = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -54,8 +55,8 @@ ${canonical}<meta name="robots" content="${robots}">
 ${feed}
 <meta property="og:site_name" content="${SITE_NAME}"><meta property="og:type" content="${m.ogType ?? 'website'}"><meta property="og:locale" content="en_US">
 <meta property="og:title" content="${escAttr(m.title)}"><meta property="og:description" content="${escAttr(m.description)}"><meta property="og:url" content="${escAttr(url)}">
-<meta property="og:image" content="${img}"><meta property="og:image:width" content="${OG_IMAGE_W}"><meta property="og:image:height" content="${OG_IMAGE_H}"><meta property="og:image:type" content="image/png"><meta property="og:image:alt" content="${SITE_NAME} — ${TAGLINE}">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escAttr(m.title)}"><meta name="twitter:description" content="${escAttr(m.description)}"><meta name="twitter:image" content="${img}"><meta name="twitter:image:alt" content="${SITE_NAME} — ${TAGLINE}">
+<meta property="og:image" content="${img}"><meta property="og:image:width" content="${OG_IMAGE_W}"><meta property="og:image:height" content="${OG_IMAGE_H}"><meta property="og:image:type" content="image/png"><meta property="og:image:alt" content="ReserveWatch: On-chain reserve health for tokenized assets">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escAttr(m.title)}"><meta name="twitter:description" content="${escAttr(m.description)}"><meta name="twitter:image" content="${img}"><meta name="twitter:image:alt" content="ReserveWatch: On-chain reserve health for tokenized assets">
 ${ld}`;
 }
 
@@ -83,7 +84,7 @@ export function orgRef() {
 export const orgLd = (email: string) => ({
   '@context': 'https://schema.org',
   ...orgRef(),
-  slogan: TAGLINE, email,
+  slogan: TAGLINE, description: TAGLINE, email,
   contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email, url: abs('/contact'), availableLanguage: 'en' },
   ...(SAME_AS.length ? { sameAs: SAME_AS } : {}),
 });
@@ -120,8 +121,8 @@ export function snapshotsDatasetLd() {
 /** Dataset: the public JSON API really is a free, machine-readable feed of these readings. */
 export const datasetLd = (updatedAt?: string) => ({
   '@context': 'https://schema.org', '@type': 'Dataset', '@id': SITE_URL + '/#dataset',
-  name: 'XRPL commodity token on-ledger health readings',
-  description: 'Automated readings of public XRP Ledger data for commodity tokens (gold, silver, platinum, energy, diamonds and other classes as issuers appear): circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
+  name: 'On-chain reserve health readings for tokenized assets',
+  description: 'Automated readings of public XRPL, Solana, and Stellar data for tokenized commodities (gold, silver, platinum, energy, diamonds and other classes as issuers appear). On the XRP Ledger the reading includes circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. Solana and Stellar readings cover supply and issuer controls when the public endpoint returns them. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
   license: abs(DATA_LICENSE_PATH),
   keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
@@ -176,9 +177,9 @@ export function llmsTxt(liveFacts?: string): string {
   ];
   return `# ${SITE_NAME}
 
-> ${TAGLINE}. ${DEFAULT_DESCRIPTION}
+> ${DEFAULT_DESCRIPTION}
 
-${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity. The live pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
+${SITE_NAME} reads public ledger data for tokenized assets on XRPL, Solana, and Stellar. The XRP Ledger pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
 
 7-day trading volume counts DEX fills and AMM swaps against XRP, RLUSD, and USDV, from XRPL Meta's exchange index of public ledger history. Row size is the quote amount and row price is quote per token; dollars are the quote amount times the quote's USD price (current XRP/USD, or $1 for RLUSD and USDV). A fill more than 5× from spot, where a spot price per token exists, is left out, and a week those fills dominate is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks. Those stables are quote assets, not commodity tokens. A cut-off window is not measured, not zero. Volume is not a health label and not a buy or sell signal.
 
@@ -193,7 +194,8 @@ ${liveFacts ? liveFacts + '\n\n' : ''}Cite a reading as: ReserveWatch, YYYY-MM-D
 
 ## Key pages
 
-- [Home](${abs('/')}): live comparison of issuer controls, liquidity, and public verification.
+- [Home](${abs('/')}): live comparison of issuer controls, liquidity, and public verification on the XRP Ledger.
+- Ledgers: XRPL is the default (${abs('/')}). Solana: ${abs('/ledger/solana')}. Stellar: ${abs('/ledger/stellar')}. All three: ${abs('/ledger/all')}. A Solana or Stellar reading is not a vault check.
 - [Methodology](${abs('/methodology')}): how comparison labels differ from the legacy OK / WARN / CRITICAL overall, including peg vs spot.
 - [Learn](${abs('/learn')}): plain-language explainers.
 ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
@@ -224,7 +226,9 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
   const newest = days[0]?.date ?? legalDate;
   const urls: { loc: string; lastmod: string; changefreq: string; priority: string }[] = [
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
+    ...(['solana', 'stellar', 'all'] as const).map(id => ({ loc: abs(`/ledger/${id}`), lastmod: liveDate, changefreq: 'hourly', priority: id === 'all' ? '0.6' : '0.8' })),
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
+    ...CHAIN_TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.6' })),
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },
     { loc: abs('/state'), lastmod: liveDate, changefreq: 'daily', priority: '0.9' },
     ...CLASS_PAGES.map(c => ({ loc: abs(classPublicPath(c.slug)), lastmod: TOKENS.some(t => c.codes.includes(t.metal)) ? liveDate : legalDate, changefreq: 'weekly', priority: TOKENS.some(t => c.codes.includes(t.metal)) ? '0.8' : '0.5' })),
@@ -239,6 +243,7 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
     ...days.map(d => ({ loc: abs(`/news/${d.date}`), lastmod: d.date, changefreq: 'weekly', priority: '0.5' })),
     ...[...news.weeks].sort((a, b) => a.date < b.date ? 1 : -1).map(w => ({ loc: abs(`/news/week/${w.week}`), lastmod: w.date, changefreq: 'weekly', priority: '0.6' })),
     ...NEWS_TAGS.filter(tag => newsByTag(tag, news).length >= 5).map(tag => ({ loc: abs(`/news/tag/${tag}`), lastmod: newsByTag(tag, news)[0]?.date ?? newest, changefreq: 'weekly', priority: '0.4' })),
+    ...NEWS_LEDGERS.filter(name => newsByLedger(name, news).length >= 5).map(name => ({ loc: abs(`/news/ledger/${name}`), lastmod: newsByLedger(name, news)[0]?.date ?? newest, changefreq: 'weekly', priority: '0.4' })),
     { loc: abs('/briefs'), lastmod: BRIEFS[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...BRIEFS.map(b => ({ loc: abs(`/briefs/${b.slug}`), lastmod: b.date, changefreq: 'yearly', priority: '0.5' })),
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },

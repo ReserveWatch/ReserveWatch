@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# ReserveWatch — XRPL commodity-token health monitor (Express + xrpl.js)
+# ReserveWatch — on-chain reserve health for tokenized assets
 FROM node:24-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

@@ -18,6 +18,8 @@ export interface BookInfo { pair: string; bestBidUsd: number | null; bestAskUsd:
 
 export interface TokenReport {
   id: string; name: string; project: string; issuer: string; currency: string; displayCode: string;
+  /** Always xrpl for this monitor. Solana and Stellar readings live beside the snapshot. */
+  ledger: 'xrpl';
   /** Commodity class code (XAU, XAG, XPT, XPD, OIL, DIAMOND, ENERGY, …). Field name kept for API stability. */
   metal: Commodity; gramsPerToken: number; website?: string; notes: string[]; label?: string;
   /** Slug of the /commodities/:slug hub and plain unit description. */
@@ -299,7 +301,7 @@ export async function checkToken(t: TokenDef, xrpUsd: number | null, spotCache: 
   const status = checks.reduce<Severity>((m, c) => (rank[c.severity] > rank[m] ? c.severity : m), 'ok');
 
   return {
-    id: t.id, name: t.name, project: t.project, issuer: t.issuer, currency: t.currency, displayCode: t.displayCode,
+    id: t.id, ledger: 'xrpl', name: t.name, project: t.project, issuer: t.issuer, currency: t.currency, displayCode: t.displayCode,
     metal: t.metal, gramsPerToken: t.gramsPerToken, website: t.website, notes: t.notes, label: t.label,
     commodityClass: cm.slug, unitText: t.unitText, tokenization: t.tokenization, knownStatus: t.knownStatus,
     ledgerIndex: info.result?.ledger_index, issuerExists, domain: hexToAscii(ad.Domain), domainVerified: domainChk.verified, domainNote: domainChk.note || undefined, flags, transferFeePct,
