@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runSnapshot } from './monitor.js';
 import { processAlerts } from './alerts.js';
+import { readingFromXrpl, recordHistory } from './history.js';
 import { closeClient } from './xrplClient.js';
 
 const s = await runSnapshot();
@@ -11,6 +12,7 @@ const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.writeFileSync(path.join(DATA_DIR, 'latest.json'), JSON.stringify(s, null, 2));
 await processAlerts(s);
+try { recordHistory(s.tokens.map(readingFromXrpl), { dir: DATA_DIR }); } catch (e) { console.error('[history]', (e as Error).message); }
 console.log(`XRP/USD ${s.xrpUsd?.toFixed(4)} (${s.xrpUsdSource})`);
 for (const t of s.tokens) {
   console.log(`\n== ${t.name} [${t.status.toUpperCase()}]  issuer ${t.issuer}  currency ${t.currency}`);

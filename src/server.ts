@@ -21,6 +21,7 @@ import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, news
 import { CHAIN_TOKENS, chainTokenById } from './ledgers/registry.js';
 import { readChainLedgers, supplyLabel, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, type ChainReading } from './ledgers/read.js';
 import { fmtNum, troyOz } from './ledgers/parse.js';
+import { eventsRss, historySection, readEvents, readingFromChain, readingFromXrpl, recordHistory, tokenHistory } from './history.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -48,6 +49,7 @@ try { snap = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'latest.json'), 'utf
 
 async function refresh() {
   if (running) return; running = true;
+  let freshXrpl: TokenReport[] = [];
   try {
     const s = await runSnapshot();
     if (!s.tokens.length) throw new Error('snapshot returned no tokens (XRPL endpoints unreachable?)');
@@ -64,10 +66,16 @@ async function refresh() {
     await processAlerts(s);
     console.log(`[monitor] snapshot ok: ${s.tokens.map(t => `${t.id}=${t.status}`).join(' ')} (${s.durationMs}ms)`);
     void attachVolume(false);
+    freshXrpl = s.tokens;
   } catch (e) { lastError = (e as Error).message; console.error('[monitor] snapshot failed', e); }
-  try { chainReadings = await readChainLedgers(); }
+  let freshChain: ChainReading[] | null = null;
+  try { chainReadings = await readChainLedgers(); freshChain = chainReadings; }
   catch (e) { console.error('[ledgers] read failed', e); }
   finally { running = false; }
+  try {
+    const readings = [...freshXrpl.map(readingFromXrpl), ...(freshChain ?? []).map(readingFromChain)];
+    if (readings.length) recordHistory(readings, { dir: DATA_DIR });
+  } catch (e) { console.error('[history] record failed', e); }
 }
 
 let volumeBusy = false;
@@ -632,6 +640,7 @@ ${renderDetailLead(t)}
 ${t.errors.length ? `<h3>Fetch errors</h3><ul>${t.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
 <details class="fold"><summary>Embed this reading</summary><div class="fold-body"><p>The image links back to this page. It is a measured line, not a rating.</p><img src="/badge/${esc(t.id)}.svg" alt="${esc(t.name)} on ReserveWatch" width="320" height="64"><pre><code>${esc(badgeEmbed({ pageUrl: SITE_URL + '/token/' + t.id, imageUrl: SITE_URL + '/badge/' + t.id + '.svg', name: t.name, symbol: t.displayCode }))}</code></pre></div></details>
 <p class="muted">JSON: <a href="/api/tokens/${esc(t.id)}">/api/tokens/${esc(t.id)}</a> · More ${esc(METAL_NAME[t.metal] ?? t.metal)} tokens: <a href="${classHref(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)} on XRPL</a> · <a href="/methodology">How checks work</a></p>
+${historySection(t.id, DATA_DIR)}
 ${citeLine('/token/' + t.id, t.updatedAt)}` });
 }
 
@@ -1451,6 +1460,7 @@ function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, l
 ${checks ? `<h2>Checks</h2><ul>${checks}</ul>` : '<p>No live reading yet. The token stays listed.</p>'}
 ${token.notes.map(n => `<p>${esc(n)}</p>`).join('')}
 <p><a href="${esc(token.explorerUrl)}">Explorer</a> · <a href="${esc(token.sourceUrl)}">Address source</a> · <a href="${esc(token.website)}">Issuer site</a></p>
+${historySection(token.id, DATA_DIR)}
 <p class="muted"><a href="/disclaimer">Not investment advice and not an audit.</a></p></div>`,
   });
 }
@@ -1528,13 +1538,31 @@ app.get('/token/:id', (q, r) => {
   }
   r.send(tokenPage(t));
 });
+app.get('/alerts/feed.xml', (q, r) => {
+  const ledger = typeof q.query.ledger === 'string' ? q.query.ledger : '';
+  const known = ledger === '' || ledger === 'xrpl' || ledger === 'solana' || ledger === 'stellar';
+  const events = known ? readEvents(DATA_DIR).filter(event => !ledger || event.ledger === ledger) : [];
+  r.set('Content-Type', 'application/rss+xml; charset=utf-8');
+  r.set('Cache-Control', 'public, max-age=300');
+  r.send(eventsRss(events, SITE_URL, known && ledger ? ledger : undefined));
+});
 app.get('/alerts', (_q, r) => {
-  const rows = readAlerts().map(a => `<tr><td class="muted">${esc(a.at)}</td><td><a href="/token/${esc(a.tokenId)}">${esc(a.tokenId)}</a></td><td>${a.from ? badge(a.from) : 'new'} → ${badge(a.to)}</td><td>${a.reasons.map(esc).join('<br>')}</td></tr>`).join('');
+  const when = (at: string) => {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? at : d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
+  };
+  const tokenLink = (id: string) => `<a href="/token/${esc(id)}">${esc(id).replace(/-/g, '-<wbr>')}</a>`;
+  const rows = readAlerts().map(a => `<tr><td class="muted">${esc(when(a.at))}</td><td>${tokenLink(a.tokenId)}</td><td>${a.from ? badge(a.from) : 'new'} → ${badge(a.to)}</td><td>${a.reasons.map(esc).join('<br>')}</td></tr>`).join('');
+  const changes = readEvents(DATA_DIR).slice().reverse().map(event => `<tr><td class="muted">${esc(when(event.at))}</td><td>${tokenLink(event.tokenId)}</td><td>${esc(event.ledger)}</td><td>${esc(event.text)}</td></tr>`).join('');
   r.send(page({
-    title: 'XRPL token alert log · ReserveWatch',
-    description: 'Log of legacy OK, WARN, and CRITICAL changes for tracked XRPL commodity tokens, with the raw-check reasons. Not advice.',
+    title: 'Token reading changes · ReserveWatch',
+    description: 'Supply, issuer-control, and peg-grade changes, plus the legacy XRPL status log. Not advice.',
     path: '/alerts', refresh: true,
-    body: `<h1>Health status alert log</h1><p class="muted">Alerts follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. The live comparison is on each token page. Labels are not reserves or solvency, and not buy or sell signals.</p><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table>` }));
+    body: `<h1>Reading changes</h1>
+<p class="muted">A note is written when supply moves at least ${esc(String(process.env.HISTORY_SUPPLY_PCT || '5'))}% from the previous day, when an issuer control changes, when a graded peg moves from ok to warn or critical, or when a token is first seen or its supply is zero. Issuer controls are labeled as controls, not as events. This is not investment advice and not a vault check. Email is not sent.</p>
+<p>RSS: <a href="/alerts/feed.xml">all ledgers</a> · <a href="/alerts/feed.xml?ledger=xrpl">XRPL</a> · <a href="/alerts/feed.xml?ledger=solana">Solana</a> · <a href="/alerts/feed.xml?ledger=stellar">Stellar</a></p>
+<div class="table-wrap"><table><tr><th>At</th><th>Token</th><th>Ledger</th><th>Note</th></tr>${changes || '<tr><td colspan="4" class="muted">No reading changes recorded yet.</td></tr>'}</table></div>
+<h2>Legacy XRPL status log</h2><p class="muted">These rows follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. Labels are not reserves or solvency, and not buy or sell signals.</p><div class="table-wrap"><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table></div>` }));
 });
 app.get('/methodology', (_q, r) => { r.send(infoPage('How readings are labeled · ReserveWatch', 'How readings are labeled', '/methodology', 'How measured facts, issuer controls, and missing data differ from active problems. Not a rating or proof of reserves.', `<p class="answer">ReserveWatch separates measured facts, issuer features, and missing data from active problems. The legacy OK, WARN, or CRITICAL overall is the worst raw check. It is not a buy or sell rating and not proof of reserves.</p>${METHODOLOGY()}${citeLine('/methodology', COMPARE_UPDATED_ISO)}`, COMPARE_UPDATED)); });
 app.get('/faq', (_q, r) => { r.send(faqPage()); });
@@ -1673,6 +1701,7 @@ app.get('/api/tokens', (q, r) => {
   }
   snap ? r.json(publicSnap(snap)) : r.status(503).json({ error: lastError ?? 'warming up' });
 });
+app.get('/api/history/:tokenId', (q, r) => { r.json(tokenHistory(String(q.params.tokenId), DATA_DIR)); });
 app.get('/api/tokens/:id', (q, r) => {
   const chain = chainReadings.find(row => row.id === q.params.id);
   if (chain) return void r.json(chain);
