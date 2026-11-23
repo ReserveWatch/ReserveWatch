@@ -6,7 +6,7 @@ Price vs spot is not available.
 
 | Token | Kind | Address | Source |
 | --- | --- | --- | --- |
-| XAUm (Matrixdock) | SEP-41 contract | `CC2RBGYNCFBCVENIDL5BFBWPH4OUZM2UA3OD2K2N54GLMWCC4KWPVAGO` | https://stellar.expert/explorer/public/contract/CC2RBGYNCFBCVENIDL5BFBWPH4OUZM2UA3OD2K2N54GLMWCC4KWPVAGO (source repo Matrixdock-RWA/RWA-Contracts) |
+| XAUm (Matrixdock) | SEP-41 contract | `CC2RBGYNCFBCVENIDL5BFBWPH4OUZM2UA3OD2K2N54GLMWCC4KWPVAGO` | https://www.matrixdock.com/xaum — Matrixdock lists this contract in its stellar.toml (matrixdock.com/.well-known/stellar.toml) |
 | VNXAU (VNX) | Classic asset | `VNXAU` issued by `GCKIYYQVIFBIFDRN7BNDNHL3UZSFHT5NHDAISG2N3MWCZY3WNXL3LXN3` | https://vnx.gitbook.io/vnx-platform/vnx-gold/token-details |
 
 ReserveWatch has not checked any vault.

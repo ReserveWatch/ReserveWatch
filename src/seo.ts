@@ -20,7 +20,7 @@ export const OG_IMAGE_PATH = '/og-share.png';
 export const OG_IMAGE_W = 1200;
 export const OG_IMAGE_H = 630;
 export const DEFAULT_DESCRIPTION =
-  'Compare XRPL commodity tokens by issuer controls, liquidity, and public checks. Not a buy or sell rating.';
+  'On-chain reserve health for tokenized assets on XRPL, Solana, and Stellar. Not a vault check or a buy or sell rating.';
 export const DATA_LICENSE_PATH = '/license';
 
 const escAttr = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -92,7 +92,7 @@ export const orgLd = (email: string) => ({
 export const websiteLd = () => ({
   '@context': 'https://schema.org', '@type': 'WebSite', '@id': SITE_URL + '/#website',
   name: SITE_NAME, alternateName: `${SITE_NAME} — ${TAGLINE}`, url: SITE_URL + '/', inLanguage: 'en',
-  description: `${TAGLINE}. ${DEFAULT_DESCRIPTION}`, publisher: orgRef(),
+  description: DEFAULT_DESCRIPTION, publisher: orgRef(),
   // No SearchAction: the site has no query search. A made-up search target would be invalid.
 });
 
@@ -179,7 +179,7 @@ export function llmsTxt(liveFacts?: string): string {
 
 > ${TAGLINE}. ${DEFAULT_DESCRIPTION}
 
-${SITE_NAME} reads public XRP Ledger data for tokens that say they represent a commodity. The live pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
+${SITE_NAME} reads public ledger data for tokenized assets on XRPL, Solana, and Stellar. The XRP Ledger pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
 
 7-day trading volume counts DEX fills and AMM swaps against XRP, RLUSD, and USDV, from XRPL Meta's exchange index of public ledger history. Row size is the quote amount and row price is quote per token; dollars are the quote amount times the quote's USD price (current XRP/USD, or $1 for RLUSD and USDV). A fill more than 5× from spot, where a spot price per token exists, is left out, and a week those fills dominate is not measured. The week-over-week change adds only tokens with a dollar figure for both weeks. Those stables are quote assets, not commodity tokens. A cut-off window is not measured, not zero. Volume is not a health label and not a buy or sell signal.
 
@@ -226,7 +226,7 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
   const newest = days[0]?.date ?? legalDate;
   const urls: { loc: string; lastmod: string; changefreq: string; priority: string }[] = [
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
-    ...(['xrpl', 'solana', 'stellar', 'all'] as const).map(id => ({ loc: abs(`/ledger/${id}`), lastmod: liveDate, changefreq: 'hourly', priority: id === 'all' ? '0.6' : '0.8' })),
+    ...(['solana', 'stellar', 'all'] as const).map(id => ({ loc: abs(`/ledger/${id}`), lastmod: liveDate, changefreq: 'hourly', priority: id === 'all' ? '0.6' : '0.8' })),
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
     ...CHAIN_TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.6' })),
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },

@@ -19,7 +19,8 @@ import { stateAnswer, summarizeState, type StateToken } from './state.js';
 import { badgeEmbed, badgeSvg } from './badge.js';
 import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, newsAnchor, newsByLedger, newsByTag, newsDayTitle, newsDays, newsItemPath, newsLongDay, newsMonDay, newsMonths, newsRss, newsTagTitle, newsWeek, newsWeekTitle, NEWS_ARCHIVE_TITLE, NEWS_INDEX_TITLE, NEWS_LEDGERS, NEWS_TAGS, snapshotPath, weekItems, type NewsFile, type NewsItem, type NewsLedger, type NewsTag } from './content/news.js';
 import { CHAIN_TOKENS, chainTokenById } from './ledgers/registry.js';
-import { readChainLedgers, type ChainReading } from './ledgers/read.js';
+import { readChainLedgers, supplyLabel, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, type ChainReading } from './ledgers/read.js';
+import { fmtNum, troyOz } from './ledgers/parse.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -277,8 +278,8 @@ ${o.refresh ? '<script>setTimeout(function(){location.reload()},60000)</script>'
 <header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — On-chain reserve health for tokenized assets" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
 <footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/news">News</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
-<p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
-<p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Ledger: ${esc(endpointList()[0])}.</p></div></footer></body></html>`;
+<p>Public XRPL, Solana and Stellar readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
+<p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Endpoints: XRPL ${esc(endpointList()[0])}; Solana ${esc(SOLANA_ENDPOINT())}; Horizon ${esc(HORIZON_ENDPOINT())}; Soroban ${esc(SOROBAN_ENDPOINT())}.</p></div></footer></body></html>`;
 
 function header(): string {
   if (!snap) return `<div class="card">${lastError ? `Snapshot error: ${esc(lastError)}` : 'Loading first snapshot from XRPL… refresh in a few seconds.'}</div>`;
@@ -338,29 +339,33 @@ const LEDGER_COPY: Record<LedgerTab, { title: string; description: string }> = {
 function ledgerTabs(active: LedgerTab): string {
   return `<nav class="ledger-tabs" role="tablist" aria-label="Ledger">${LEDGER_TABS.map(tab => `<a class="ledger-tab" role="tab" data-ledger="${tab.id}" href="${tab.href}"${tab.id === active ? ' aria-current="page"' : ''}><span class="ledger-dot" aria-hidden="true"></span>${tab.label}</a>`).join('')}</nav>`;
 }
-function newsLedgerTabs(active?: NewsLedger): string {
-  return `<nav class="ledger-tabs" aria-label="News by ledger">${NEWS_LEDGERS.map(name => `<a class="ledger-tab" href="/news/ledger/${name}"${name === active ? ' aria-current="page"' : ''}><span class="ledger-dot" aria-hidden="true"></span>${name}</a>`).join('')}</nav>`;
+const NEWS_TAB_LABEL: Record<NewsLedger | 'all', string> = { all: 'All', xrpl: 'XRPL', solana: 'Solana', stellar: 'Stellar', other: 'Other' };
+function newsLedgerTabs(active: NewsLedger | 'all' = 'all'): string {
+  const tabs: { id: NewsLedger | 'all'; href: string }[] = [{ id: 'all', href: '/news' }, ...NEWS_LEDGERS.map(name => ({ id: name, href: `/news/ledger/${name}` }))];
+  return `<nav class="ledger-tabs" aria-label="News by ledger">${tabs.map(tab => `<a class="ledger-tab" href="${tab.href}"${tab.id === active ? ' aria-current="page"' : ''}><span class="ledger-dot" aria-hidden="true"></span>${NEWS_TAB_LABEL[tab.id]}</a>`).join('')}</nav>`;
 }
 function switchRows() {
   const xrpl = (snap?.tokens ?? []).map(t => ({
-    id: t.id, ledger: 'xrpl', name: t.name, code: t.displayCode, bridged: false,
-    supply: t.supply.circulating == null ? 'not available' : String(t.supply.circulating),
+    id: t.id, ledger: 'XRPL', ledgerId: 'xrpl', name: t.name, code: t.displayCode, metal: commodityMeta(t.metal).name,
+    grams: t.gramsPerToken, supply: t.supply.circulating, bridged: false,
     holders: String(t.holders.nonZero), href: `/token/${t.id}`,
+    countInTotal: t.supply.circulating !== 0,
   }));
   const extra = CHAIN_TOKENS.map(token => {
     const live = chainReadings.find(row => row.id === token.id);
+    const supply = live?.supply ?? null;
     return {
-      id: token.id, ledger: token.ledger, name: token.name, code: token.displayCode, bridged: token.bridged,
-      supply: live?.supply == null ? 'not available' : String(live.supply),
-      holders: live?.holders == null ? 'not available' : String(live.holders),
-      href: `/token/${token.id}`,
+      id: token.id, ledger: token.ledger === 'solana' ? 'Solana' : 'Stellar', ledgerId: token.ledger,
+      name: token.name, code: token.displayCode, metal: 'gold', grams: token.gramsPerToken, supply, bridged: token.bridged,
+      holders: live?.holders == null ? 'not available' : String(live.holders), href: `/token/${token.id}`,
+      countInTotal: !(token.ledger === 'stellar' && supply === 0),
     };
   });
   return [...xrpl, ...extra];
 }
 function ledgerTable(rows: ReturnType<typeof switchRows>, showLedger: boolean): string {
-  const head = `<tr><th>Token</th>${showLedger ? '<th>Ledger</th>' : ''}<th>Supply</th><th>Holders</th></tr>`;
-  const body = rows.map(row => `<tr data-ledger="${esc(row.ledger)}" data-name="${esc(row.name)} ${esc(row.code)}"><td><a href="${esc(row.href)}">${esc(row.name)}</a>${row.bridged ? ' <span class="pill">bridged</span>' : ''}</td>${showLedger ? `<td>${esc(row.ledger)}</td>` : ''}<td>${esc(row.supply)}</td><td>${esc(row.holders)}</td></tr>`).join('');
+  const head = `<tr><th>Token</th>${showLedger ? '<th>Ledger</th>' : ''}<th>Supply (troy oz)</th><th>Holders</th></tr>`;
+  const body = rows.map(row => `<tr data-ledger="${esc(row.ledgerId)}" data-name="${esc(row.name)} ${esc(row.code)} ${esc(row.metal)}"><td><a href="${esc(row.href)}">${esc(row.name)}</a>${row.bridged ? ' <span class="pill">bridged</span>' : ''}</td>${showLedger ? `<td>${esc(row.ledger)}</td>` : ''}<td>${esc(supplyLabel(row.supply, row.ledgerId, row.grams))}</td><td>${esc(row.holders)}</td></tr>`).join('');
   return `<table class="ledger-table"><thead>${head}</thead><tbody>${body || '<tr><td colspan="4">No tokens in this view.</td></tr>'}</tbody></table>`;
 }
 function ledgerNewsBlock(ledger: 'xrpl' | 'solana' | 'stellar'): string {
@@ -368,21 +373,24 @@ function ledgerNewsBlock(ledger: 'xrpl' | 'solana' | 'stellar'): string {
   if (!items.length) return '';
   return `<section class="news-latest" aria-label="Latest news"><h2>Latest news</h2><ul>${items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a> <span class="meta">${esc(item.date)}</span></li>`).join('')}</ul><p><a href="/news/ledger/${ledger}">News for this ledger</a></p></section>`;
 }
-const LEDGER_JS = `(function(){var view=document.getElementById('ledger-view');var raw=document.getElementById('ledger-data');if(!view||!raw)return;var rows=JSON.parse(raw.textContent);var home=view.getAttribute('data-ledger')==='xrpl'?view.innerHTML:'';function text(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}function draw(list,showLedger){var h='<table class="ledger-table"><thead><tr><th>Token</th>'+(showLedger?'<th><button type="button" id="ledger-sort">Ledger</button></th>':'')+'<th>Supply</th><th>Holders</th></tr></thead><tbody>';list.forEach(function(r){h+='<tr><td><a href="'+text(r.href)+'">'+text(r.name)+'</a>'+(r.bridged?' <span class="pill">bridged</span>':'')+'</td>'+(showLedger?'<td>'+text(r.ledger)+'</td>':'')+'<td>'+text(r.supply)+'</td><td>'+text(r.holders)+'</td></tr>';});view.innerHTML=h+'</tbody></table>';var btn=document.getElementById('ledger-sort');if(btn)btn.addEventListener('click',function(){list.sort(function(a,b){return a.ledger<b.ledger?-1:1;});draw(list,true);});}function apply(id,q){var query=(q||'').trim().toLowerCase();var list=rows.filter(function(r){return !query||(r.name+' '+r.code+' '+r.ledger).toLowerCase().indexOf(query)>=0;});if(query)return draw(list,true);if(id==='xrpl'&&home){view.innerHTML=home;return;}draw(list.filter(function(r){return id==='all'||r.ledger===id;}),id==='all');}document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(tab){tab.addEventListener('click',function(e){if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();var id=tab.getAttribute('data-ledger');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');});tab.setAttribute('aria-current','page');apply(id,(document.getElementById('ledger-search')||{}).value);history.pushState({ledger:id},'',tab.getAttribute('href'));});});var box=document.getElementById('ledger-search');if(box)box.addEventListener('input',function(){var on=document.querySelector('.ledger-tabs[role="tablist"] .ledger-tab[aria-current="page"]');apply(on?on.getAttribute('data-ledger'):'all',box.value);});window.addEventListener('popstate',function(){var path=location.pathname;var id=path==='/'?'xrpl':(path.split('/')[2]||'xrpl');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');if(el.getAttribute('data-ledger')===id)el.setAttribute('aria-current','page');});apply(id,'');});})();`;
+const LEDGER_JS = `(function(){var view=document.getElementById('ledger-view');var raw=document.getElementById('ledger-data');if(!view||!raw)return;var rows=JSON.parse(raw.textContent);var home=view.getAttribute('data-ledger')==='xrpl'?view.innerHTML:'';var metals={gold:1,silver:1,platinum:1,palladium:1,diamonds:1};function text(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}function oz(r){if(r.supply==null)return 'not available';if(r.supply===0&&r.ledgerId==='stellar')return '0 issued on Stellar';if(!(r.grams>0))return 'n/a';return (r.supply*r.grams/31.1034768).toLocaleString('en-US',{maximumFractionDigits:2});}function hit(r,q){if(metals[q])return r.metal===q;return (r.name+' '+r.code+' '+r.ledger+' '+r.metal).toLowerCase().indexOf(q)>=0;}function draw(list,showLedger){var h='<table class="ledger-table"><thead><tr><th>Token</th>'+(showLedger?'<th><button type="button" id="ledger-sort">Ledger</button></th>':'')+'<th>Supply (troy oz)</th><th>Holders</th></tr></thead><tbody>';list.forEach(function(r){h+='<tr><td><a href="'+text(r.href)+'">'+text(r.name)+'</a>'+(r.bridged?' <span class="pill">bridged</span>':'')+'</td>'+(showLedger?'<td>'+text(r.ledger)+'</td>':'')+'<td>'+text(oz(r))+'</td><td>'+text(r.holders)+'</td></tr>';});view.innerHTML=h+'</tbody></table>';var btn=document.getElementById('ledger-sort');if(btn)btn.addEventListener('click',function(){list.sort(function(a,b){return a.ledger<b.ledger?-1:1;});draw(list,true);});}function apply(id,q){var query=(q||'').trim().toLowerCase();var list=rows.filter(function(r){return !query||hit(r,query);});if(query)return draw(list,true);if(id==='xrpl'&&home){view.innerHTML=home;return;}draw(list.filter(function(r){return id==='all'||r.ledgerId===id;}),id==='all');}document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(tab){tab.addEventListener('click',function(e){if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();var id=tab.getAttribute('data-ledger');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');});tab.setAttribute('aria-current','page');apply(id,(document.getElementById('ledger-search')||{}).value);history.pushState({ledger:id},'',tab.getAttribute('href'));});});var box=document.getElementById('ledger-search');if(box)box.addEventListener('input',function(){var on=document.querySelector('.ledger-tabs[role="tablist"] .ledger-tab[aria-current="page"]');apply(on?on.getAttribute('data-ledger'):'all',box.value);});window.addEventListener('popstate',function(){var path=location.pathname;var id=path==='/'?'xrpl':(path.split('/')[2]||'xrpl');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');if(el.getAttribute('data-ledger')===id)el.setAttribute('aria-current','page');});apply(id,'');});})();`;
 function ledgerSwitch(active: LedgerTab, inner: string): string {
   const rows = switchRows();
-  const shown = active === 'all' ? rows : rows.filter(row => row.ledger === active);
+  const shown = active === 'all' ? rows : rows.filter(row => row.ledgerId === active);
+  const counted = shown.filter(row => row.countInTotal);
+  const ounces = counted.reduce((sum, row) => sum + (typeof row.supply === 'number' && row.grams > 0 ? troyOz(row.supply, row.grams) : 0), 0);
   const missing = shown.filter(row => row.holders === 'not available').length;
-  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${shown.length} tokens in this view.${missing ? ` ${missing} with holders not available.` : ''} Supply is a token count, not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script type="application/json" id="ledger-data">${JSON.stringify(rows).replace(/</g, '\\u003c')}</script><script>${LEDGER_JS}</script>`;
+  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${counted.length} tokens in the total, about ${fmtNum(ounces)} troy oz where supply was read.${missing ? ` ${missing} with holders not available.` : ''} A token with 0 issued on Stellar stays listed and is left out of this total. Not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script type="application/json" id="ledger-data">${JSON.stringify(rows).replace(/</g, '\\u003c')}</script><script>${LEDGER_JS}</script>`;
 }
 function listPage() {
   const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
   return page({
-    title: 'Compare XRPL commodity tokens · ReserveWatch',
+    title: 'On-chain reserve health · ReserveWatch',
     description: DEFAULT_DESCRIPTION, path: '/', refresh: true,
     jsonLd: [orgLd(CONTACT_EMAIL), websiteLd(), datasetLd(snap?.updatedAt)],
-    body: `<div class="mast"><h1>Compare XRPL commodity tokens</h1>
-<p class="lede">Issuer controls, liquidity, and public verification. Public ledger readings, not a buy or sell list.</p>
+    body: `<div class="mast"><h1>${esc(TAGLINE)}</h1>
+<p class="lede">Public readings for tokenized assets. XRPL is the default view. Solana and Stellar are the other tabs. Not a buy or sell list.</p>
+${ledgerSwitch('xrpl', `<div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>`)}
 ${homeAnswer()}
 ${header()}
 <ul class="legend-row">
@@ -402,7 +410,6 @@ ${header()}
 ${classStrip()}
 ${marketActivityHtml()}
 ${latestNewsHtml()}
-${ledgerSwitch('xrpl', `<div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>`)}
 <p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>` });
 }
 
@@ -1416,18 +1423,24 @@ ${news}
 }
 function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, live?: ChainReading) {
   const checks = (live?.checks ?? []).map(c => `<li><b>${esc(c.result)}</b> ${esc(c.message)}</li>`).join('');
+  const chainName = token.ledger === 'solana' ? 'Solana' : 'Stellar';
+  const supplyLine = live?.supply == null
+    ? 'not available'
+    : live.supply === 0 && token.ledger === 'stellar'
+      ? '0 issued on Stellar'
+      : `${fmtNum(live.supply)} ${token.displayCode} = ${fmtNum(live.supply * token.gramsPerToken)} g ≈ ${fmtNum(troyOz(live.supply, token.gramsPerToken))} oz`;
   return page({
-    title: `${token.displayCode} on ${token.ledger} · ReserveWatch`.slice(0, 60),
-    description: `${token.name} on ${token.ledger}. Supply and issuer controls from the public ledger. Not a vault check.`,
+    title: `${token.displayCode} on ${chainName} · ReserveWatch`,
+    description: `${token.name} on ${chainName}. Supply and issuer controls from the public ledger. Not a vault check.`,
     path: `/token/${token.id}`,
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: token.ledger, path: `/ledger/${token.ledger}` }, { name: token.name, path: `/token/${token.id}` }])],
-    body: `<div class="legal"><p class="crumb"><a href="/ledger/${token.ledger}">${esc(token.ledger)}</a></p><h1>${esc(token.name)}</h1>
-<p class="answer">${esc(token.project)} on ${esc(token.ledger)}.${token.bridged ? ' Bridged.' : ''} ReserveWatch has not checked any vault.</p>
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: chainName, path: `/ledger/${token.ledger}` }, { name: token.name, path: `/token/${token.id}` }])],
+    body: `<div class="legal"><p class="crumb"><a href="/ledger/${token.ledger}">${chainName}</a></p><h1>${esc(token.name)}</h1>
+<p class="answer">${esc(token.project)} on ${chainName}.${token.bridged ? ' Bridged.' : ''} ReserveWatch has not checked any vault.</p>
 <ul>
 <li>Address: <code>${esc(token.address)}</code>${token.issuer ? ` · issuer <code>${esc(token.issuer)}</code>` : ''}</li>
-<li>Supply: ${live?.supply == null ? 'not available' : esc(String(live.supply))}</li>
+<li>Supply: ${esc(supplyLine)}</li>
 <li>Holders: ${live?.holders == null ? 'not available' : esc(String(live.holders))}</li>
-<li>Price vs spot: not available${live?.spotUsd != null ? ` · spot gold ${esc(String(live.spotUsd))} USD/oz is context only` : ''}</li>
+<li>Price vs spot: ${esc(live?.pegNote ?? 'not available')}</li>
 </ul>
 ${checks ? `<h2>Checks</h2><ul>${checks}</ul>` : '<p>No live reading yet. The token stays listed.</p>'}
 ${token.notes.map(n => `<p>${esc(n)}</p>`).join('')}
@@ -1492,7 +1505,8 @@ app.use(express.static(PUBLIC_DIR, { maxAge: '7d', index: false }));
 app.get('/', (_q, r) => { r.send(listPage()); });
 app.get('/ledger/:ledger', (q, r) => {
   const id = String(q.params.ledger);
-  if (id !== 'xrpl' && id !== 'solana' && id !== 'stellar' && id !== 'all') {
+  if (id === 'xrpl') return void r.redirect(301, '/');
+  if (id !== 'solana' && id !== 'stellar' && id !== 'all') {
     return void r.status(404).send(page({ title: 'Not found · ReserveWatch', description: 'This page does not exist on ReserveWatch.', path: q.path, noindex: true, body: '<h1>Not found</h1><p>Unknown ledger. <a href="/">Back to XRPL</a>.</p>' }));
   }
   r.send(ledgerPage(id));
@@ -1642,6 +1656,9 @@ app.get('/learn/clawback-freeze-trust-lines', (_q, r) => { r.send(clawbackPillar
 for (const g of LEARN_GUIDES) app.get(`/learn/${g.slug}`, (_q, r) => { r.send(learnGuidePage(g)); });
 app.get('/api/tokens', (q, r) => {
   const which = String(q.query.ledger || 'xrpl');
+  if (q.query.ledger != null && which !== 'xrpl' && which !== 'solana' && which !== 'stellar' && which !== 'all') {
+    return void r.status(400).json({ error: 'unknown ledger' });
+  }
   if (which === 'solana' || which === 'stellar' || which === 'all') {
     const extra = chainReadings.filter(row => which === 'all' || row.ledger === which).map(row => ({ ...row, ledger: row.ledger }));
     const xrpl = which === 'all' && snap ? publicSnap(snap).tokens : [];

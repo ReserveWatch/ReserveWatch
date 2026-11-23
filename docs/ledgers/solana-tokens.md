@@ -9,8 +9,8 @@ Left out: Oro Gold (no mint address confirmed from the issuer or a Solana token 
 | Token | Mint | Bridged | Source |
 | --- | --- | --- | --- |
 | PAXG (Paxos) | `5GgRAEmv8ZxF2PR5hY72Qs5x1bnQ6UK2RbTPoqJ3wSwW` | no | https://docs.paxos.com/guides/stablecoin/paxg/mainnet |
-| XAUT0 (Tether) | `AymATz4TCL9sWNEEV9Kvyz45CHVhDZ6kUgjTJPzLpU9P` | yes | https://docs.usdt0.to/technical-documentation/developer |
-| XAUm (Matrixdock) | `5aLhp9VnUEKcsdtkfsf2DUgpJfomx7GmYVny24dHUZoB` | no | https://tokens.solana.com/gold?solana=5aLhp9VnUEKcsdtkfsf2DUgpJfomx7GmYVny24dHUZoB |
+| XAUT0 (Tether) | `AymATz4TCL9sWNEEV9Kvyz45CHVhDZ6kUgjTJPzLpU9P` | yes | https://usdt0.gitbook.io/xaut0/technical-documentation/developer |
+| XAUm (Matrixdock) | `5aLhp9VnUEKcsdtkfsf2DUgpJfomx7GmYVny24dHUZoB` | no | https://www.matrixdock.com/xaum |
 | DGLD (Gold Token SA) | `dg1dmo6NZNagkwB6EAfUeaco6CFXFLRhb1KCrsqXTVz` | no | https://dgld.ch/ |
 | VNXAU (VNX) | `9TPL8droGJ7jThsq4momaoz6uhTcvX2SeMqipoPmNa8R` | no | https://vnx.gitbook.io/vnx-platform/vnx-gold/token-details |
 

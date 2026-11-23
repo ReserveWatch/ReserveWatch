@@ -25,7 +25,7 @@ function meta(html: string) {
 
 const paths = [
   '/', '/commodities', '/state', '/alerts', '/methodology', '/faq', '/about', '/independent',
-  '/news', '/news/archive', '/ledger/xrpl', '/ledger/solana', '/ledger/stellar', '/ledger/all',
+  '/news', '/news/archive', '/ledger/solana', '/ledger/stellar', '/ledger/all',
   ...newsDays(loadNews()).map(d => `/news/${d.date}`),
   ...NEWS_LEDGERS.map(name => `/news/ledger/${name}`),
   ...CHAIN_TOKENS.map(t => `/token/${t.id}`),
