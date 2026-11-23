@@ -118,9 +118,11 @@ test('ledger tabs, routes, search text, and the news ledger filter render', asyn
     const home = await get('/');
     assert.match(home.html, /<h1>On-chain reserve health for tokenized assets<\/h1>[\s\S]*class="ledger-tab"/);
     assert.ok(home.html.indexOf('class="ledger-tab"') < home.html.indexOf('aria-label="Commodities"'));
-    assert.match(home.html, /"metal":"gold"/);
-    assert.match(home.html, /Supply \(troy oz\)/);
-    assert.match(home.html, /toLocaleString\('en-US',\{maximumFractionDigits:2\}\)/);
+    assert.match(home.html, /class="board"/);
+    assert.match(home.html, /id="ledger-search"/);
+    assert.match(home.html, /troy oz/);
+    assert.equal(home.html.includes('preventDefault'), false);
+    assert.equal(home.html.includes('pushState'), false);
     const solana = await get('/ledger/solana');
     assert.equal(solana.status, 200);
     assert.match(solana.html, /PAX Gold/);

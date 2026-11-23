@@ -30,6 +30,8 @@ export interface ChainReading {
   clawback: boolean | null;
   controls: SolanaControls | null;
   spotUsd: number | null;
+  /** Public gold spot feed named on the reading. Empty when the caller passed a number only. */
+  spotSource: string;
   priceUsd: number | null;
   pricePerOz: number | null;
   liquidityUsd: number | null;
@@ -50,7 +52,8 @@ const HORIZON = () => process.env.STELLAR_HORIZON_URL || 'https://horizon.stella
 const SOROBAN = () => process.env.STELLAR_SOROBAN_RPC_URL || 'https://mainnet.sorobanrpc.com';
 const USDC_STELLAR = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75';
 const USDC_CLASSIC = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-const PEG_LIQ = 25_000;
+/** Quote liquidity, in USD, required before a Solana or Stellar price is graded. */
+export const CHAIN_PEG_LIQ_USD = 25_000;
 const PRICE_TTL = 5 * 60 * 1000;
 
 export const SOLANA_ENDPOINT = SOLANA_RPC;
@@ -116,7 +119,7 @@ function base(token: ChainToken, spotUsd: number | null, now: string): ChainRead
     metal: 'gold', gramsPerToken: token.gramsPerToken, bridged: token.bridged, address: token.address, issuer: token.issuer,
     kind: token.kind, explorerUrl: token.explorerUrl, website: token.website,
     supply: null, holders: null, holdersNote: '', mintAuthority: null, freezeAuthority: null,
-    authRequired: null, revocable: null, clawback: null, controls: null, spotUsd,
+    authRequired: null, revocable: null, clawback: null, controls: null, spotUsd, spotSource: '',
     priceUsd: null, pricePerOz: null, liquidityUsd: null,
     pegNote: 'Price vs spot is not available.',
     checks: [], error: undefined, updatedAt: now, notes: token.notes, countInTotal: true,
@@ -132,7 +135,7 @@ function applyPrice(row: ChainReading, usdPerToken: number | null, liquidity: nu
   }
   const perOz = usdPerToken * GRAMS_PER_TROY_OZ / row.gramsPerToken;
   row.pricePerOz = perOz;
-  const thin = liquidity == null || liquidity < PEG_LIQ;
+  const thin = liquidity == null || liquidity < CHAIN_PEG_LIQ_USD;
   if (thin) {
     row.pegNote = `About ${fmtNum(perOz)} USD per troy oz. Thin market, not graded.`;
     return;
@@ -151,7 +154,7 @@ function applyPrice(row: ChainReading, usdPerToken: number | null, liquidity: nu
 }
 
 function pegGrade(row: ChainReading): ChainCheck['result'] {
-  if (row.pricePerOz == null || row.spotUsd == null || row.liquidityUsd == null || row.liquidityUsd < PEG_LIQ) return 'na';
+  if (row.pricePerOz == null || row.spotUsd == null || row.liquidityUsd == null || row.liquidityUsd < CHAIN_PEG_LIQ_USD) return 'na';
   const abs = Math.abs((row.pricePerOz - row.spotUsd) / row.spotUsd);
   if (abs >= 0.1) return 'critical';
   if (abs >= 0.03) return 'warn';
@@ -295,8 +298,13 @@ export async function readChainLedgers(opts: ReadOpts = {}): Promise<ChainReadin
   const env = opts.env ?? process.env;
   const call = opts.sorobanCall ?? sorobanCall;
   let spot = opts.spotUsd ?? null;
+  let spotSource = '';
   if (opts.spotUsd === undefined) {
-    try { spot = (await getSpot('XAU')).usdPerOz; } catch { spot = null; }
+    try {
+      const quote = await getSpot('XAU');
+      spot = quote.usdPerOz;
+      spotSource = quote.source;
+    } catch { spot = null; }
   }
   const now = new Date().toISOString();
   const mints = CHAIN_TOKENS.filter(token => token.ledger === 'solana').map(token => token.address);
@@ -309,11 +317,13 @@ export async function readChainLedgers(opts: ReadOpts = {}): Promise<ChainReadin
     ? readSolana(token, fetchImpl, env, spot, jupiter?.[token.address], now)
     : readStellar(token, fetchImpl, env, spot, now, call)));
   return settled.map((item, i) => {
-    if (item.status === 'fulfilled') return item.value;
-    const row = base(CHAIN_TOKENS[i], spot, now);
-    row.error = unreachable(item.reason);
-    row.holdersNote = 'Not available.';
-    return keep(row);
+    const row = item.status === 'fulfilled' ? item.value : (() => {
+      const failed = base(CHAIN_TOKENS[i], spot, now);
+      failed.error = unreachable(item.reason);
+      failed.holdersNote = 'Not available.';
+      return keep(failed);
+    })();
+    return { ...row, spotSource };
   });
 }
 
