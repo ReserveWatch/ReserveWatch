@@ -17,7 +17,9 @@ import { renderDetailLead, renderHomeCard } from './face.js';
 import { activityPlain, industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
 import { stateAnswer, summarizeState, type StateToken } from './state.js';
 import { badgeEmbed, badgeSvg } from './badge.js';
-import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, newsAnchor, newsByTag, newsDayTitle, newsDays, newsItemPath, newsLongDay, newsMonDay, newsMonths, newsRss, newsTagTitle, newsWeek, newsWeekTitle, NEWS_ARCHIVE_TITLE, NEWS_INDEX_TITLE, NEWS_TAGS, snapshotPath, weekItems, type NewsFile, type NewsItem, type NewsTag } from './content/news.js';
+import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, newsAnchor, newsByLedger, newsByTag, newsDayTitle, newsDays, newsItemPath, newsLongDay, newsMonDay, newsMonths, newsRss, newsTagTitle, newsWeek, newsWeekTitle, NEWS_ARCHIVE_TITLE, NEWS_INDEX_TITLE, NEWS_LEDGERS, NEWS_TAGS, snapshotPath, weekItems, type NewsFile, type NewsItem, type NewsLedger, type NewsTag } from './content/news.js';
+import { CHAIN_TOKENS, chainTokenById } from './ledgers/registry.js';
+import { readChainLedgers, type ChainReading } from './ledgers/read.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -35,6 +37,7 @@ const PLAUSIBLE_DOMAIN = (process.env.PLAUSIBLE_DOMAIN || '').trim();
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
 
 let snap: Snapshot | null = null;
+let chainReadings: ChainReading[] = [];
 let lastError: string | null = null;
 let running = false;
 let lastManualRefresh = 0;
@@ -61,6 +64,8 @@ async function refresh() {
     console.log(`[monitor] snapshot ok: ${s.tokens.map(t => `${t.id}=${t.status}`).join(' ')} (${s.durationMs}ms)`);
     void attachVolume(false);
   } catch (e) { lastError = (e as Error).message; console.error('[monitor] snapshot failed', e); }
+  try { chainReadings = await readChainLedgers(); }
+  catch (e) { console.error('[ledgers] read failed', e); }
   finally { running = false; }
 }
 
@@ -233,6 +238,15 @@ footer nav a{font-weight:650;text-decoration:none}
 .news-item p{margin:0 0 8px}
 .tag{color:var(--rw-gold-ink);font-weight:650;text-decoration:none}
 .news-tags{display:flex;flex-wrap:wrap;gap:8px 14px;margin:0 0 14px}
+.ledger-tabs{display:flex;gap:8px;margin:0 0 14px;overflow-x:auto;flex-wrap:wrap}
+.ledger-tab{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:8px 16px;border:1px solid var(--rw-border);border-radius:999px;background:#f4f7fb;color:var(--rw-navy);text-decoration:none;font-weight:700;white-space:nowrap}
+.ledger-tab:hover{border-color:var(--rw-navy);background:#e7eef6}
+.ledger-tab:focus-visible{outline:3px solid var(--rw-gold);outline-offset:2px}
+.ledger-tab[aria-current="page"]{background:var(--rw-navy);color:#fff;border-color:var(--rw-navy)}
+.ledger-dot{width:9px;height:9px;border-radius:50%;background:var(--rw-gold);flex:none}
+.ledger-tab[aria-current="page"] .ledger-dot{background:#fff}
+.ledger-table{width:100%;border-collapse:collapse}
+.ledger-table th button{background:none;border:0;font:inherit;font-weight:750;cursor:pointer;color:inherit}
 .news-signup{margin:14px 0;padding:12px 14px;border:1px solid var(--rw-border);border-radius:12px}
 .news-signup p{margin:8px 0 0}
 .spark{display:block}
@@ -308,6 +322,59 @@ function marketActivityHtml(): string {
   return `<section class="activity" aria-label="Market activity"><div><h2>Market activity</h2><p class="activity-total">${usd(m.usdTotal, 0)} <span>rolling 7-day volume${extra ? ` · ${esc(extra)}` : ''}</span></p><p class="chg">${esc(change)}</p></div>${spark}<details class="fold"><summary>How volume is measured</summary><div class="fold-body"><p>${esc(m.method)}</p><p>${esc(m.historyNote)}</p></div></details></section>`;
 }
 
+type LedgerTab = 'xrpl' | 'solana' | 'stellar' | 'all';
+const LEDGER_TABS: { id: LedgerTab; href: string; label: string }[] = [
+  { id: 'xrpl', href: '/', label: 'XRPL' },
+  { id: 'solana', href: '/ledger/solana', label: 'Solana' },
+  { id: 'stellar', href: '/ledger/stellar', label: 'Stellar' },
+  { id: 'all', href: '/ledger/all', label: 'All' },
+];
+const LEDGER_COPY: Record<LedgerTab, { title: string; description: string }> = {
+  xrpl: { title: 'XRPL commodity tokens · ReserveWatch', description: 'XRPL commodity tokens: issuer controls, supply, and liquidity. Not a vault check and not investment advice.' },
+  solana: { title: 'Solana commodity tokens · ReserveWatch', description: 'Solana commodity-token supply and mint controls. Holders are not available without an indexer. Not a vault check.' },
+  stellar: { title: 'Stellar commodity tokens · ReserveWatch', description: 'Stellar commodity-token supply and issuer flags. Price vs spot is not available. Not a vault check.' },
+  all: { title: 'Commodity tokens, three ledgers · ReserveWatch', description: 'XRPL, Solana, and Stellar commodity tokens in one list. A reading is not a vault check or investment advice.' },
+};
+function ledgerTabs(active: LedgerTab): string {
+  return `<nav class="ledger-tabs" role="tablist" aria-label="Ledger">${LEDGER_TABS.map(tab => `<a class="ledger-tab" role="tab" data-ledger="${tab.id}" href="${tab.href}"${tab.id === active ? ' aria-current="page"' : ''}><span class="ledger-dot" aria-hidden="true"></span>${tab.label}</a>`).join('')}</nav>`;
+}
+function newsLedgerTabs(active?: NewsLedger): string {
+  return `<nav class="ledger-tabs" aria-label="News by ledger">${NEWS_LEDGERS.map(name => `<a class="ledger-tab" href="/news/ledger/${name}"${name === active ? ' aria-current="page"' : ''}><span class="ledger-dot" aria-hidden="true"></span>${name}</a>`).join('')}</nav>`;
+}
+function switchRows() {
+  const xrpl = (snap?.tokens ?? []).map(t => ({
+    id: t.id, ledger: 'xrpl', name: t.name, code: t.displayCode, bridged: false,
+    supply: t.supply.circulating == null ? 'not available' : String(t.supply.circulating),
+    holders: String(t.holders.nonZero), href: `/token/${t.id}`,
+  }));
+  const extra = CHAIN_TOKENS.map(token => {
+    const live = chainReadings.find(row => row.id === token.id);
+    return {
+      id: token.id, ledger: token.ledger, name: token.name, code: token.displayCode, bridged: token.bridged,
+      supply: live?.supply == null ? 'not available' : String(live.supply),
+      holders: live?.holders == null ? 'not available' : String(live.holders),
+      href: `/token/${token.id}`,
+    };
+  });
+  return [...xrpl, ...extra];
+}
+function ledgerTable(rows: ReturnType<typeof switchRows>, showLedger: boolean): string {
+  const head = `<tr><th>Token</th>${showLedger ? '<th>Ledger</th>' : ''}<th>Supply</th><th>Holders</th></tr>`;
+  const body = rows.map(row => `<tr data-ledger="${esc(row.ledger)}" data-name="${esc(row.name)} ${esc(row.code)}"><td><a href="${esc(row.href)}">${esc(row.name)}</a>${row.bridged ? ' <span class="pill">bridged</span>' : ''}</td>${showLedger ? `<td>${esc(row.ledger)}</td>` : ''}<td>${esc(row.supply)}</td><td>${esc(row.holders)}</td></tr>`).join('');
+  return `<table class="ledger-table"><thead>${head}</thead><tbody>${body || '<tr><td colspan="4">No tokens in this view.</td></tr>'}</tbody></table>`;
+}
+function ledgerNewsBlock(ledger: 'xrpl' | 'solana' | 'stellar'): string {
+  const items = newsByLedger(ledger).slice(0, 3);
+  if (!items.length) return '';
+  return `<section class="news-latest" aria-label="Latest news"><h2>Latest news</h2><ul>${items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a> <span class="meta">${esc(item.date)}</span></li>`).join('')}</ul><p><a href="/news/ledger/${ledger}">News for this ledger</a></p></section>`;
+}
+const LEDGER_JS = `(function(){var view=document.getElementById('ledger-view');var raw=document.getElementById('ledger-data');if(!view||!raw)return;var rows=JSON.parse(raw.textContent);var home=view.getAttribute('data-ledger')==='xrpl'?view.innerHTML:'';function text(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}function draw(list,showLedger){var h='<table class="ledger-table"><thead><tr><th>Token</th>'+(showLedger?'<th><button type="button" id="ledger-sort">Ledger</button></th>':'')+'<th>Supply</th><th>Holders</th></tr></thead><tbody>';list.forEach(function(r){h+='<tr><td><a href="'+text(r.href)+'">'+text(r.name)+'</a>'+(r.bridged?' <span class="pill">bridged</span>':'')+'</td>'+(showLedger?'<td>'+text(r.ledger)+'</td>':'')+'<td>'+text(r.supply)+'</td><td>'+text(r.holders)+'</td></tr>';});view.innerHTML=h+'</tbody></table>';var btn=document.getElementById('ledger-sort');if(btn)btn.addEventListener('click',function(){list.sort(function(a,b){return a.ledger<b.ledger?-1:1;});draw(list,true);});}function apply(id,q){var query=(q||'').trim().toLowerCase();var list=rows.filter(function(r){return !query||(r.name+' '+r.code+' '+r.ledger).toLowerCase().indexOf(query)>=0;});if(query)return draw(list,true);if(id==='xrpl'&&home){view.innerHTML=home;return;}draw(list.filter(function(r){return id==='all'||r.ledger===id;}),id==='all');}document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(tab){tab.addEventListener('click',function(e){if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();var id=tab.getAttribute('data-ledger');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');});tab.setAttribute('aria-current','page');apply(id,(document.getElementById('ledger-search')||{}).value);history.pushState({ledger:id},'',tab.getAttribute('href'));});});var box=document.getElementById('ledger-search');if(box)box.addEventListener('input',function(){var on=document.querySelector('.ledger-tabs[role="tablist"] .ledger-tab[aria-current="page"]');apply(on?on.getAttribute('data-ledger'):'all',box.value);});window.addEventListener('popstate',function(){var path=location.pathname;var id=path==='/'?'xrpl':(path.split('/')[2]||'xrpl');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');if(el.getAttribute('data-ledger')===id)el.setAttribute('aria-current','page');});apply(id,'');});})();`;
+function ledgerSwitch(active: LedgerTab, inner: string): string {
+  const rows = switchRows();
+  const shown = active === 'all' ? rows : rows.filter(row => row.ledger === active);
+  const missing = shown.filter(row => row.holders === 'not available').length;
+  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${shown.length} tokens in this view.${missing ? ` ${missing} with holders not available.` : ''} Supply is a token count, not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script type="application/json" id="ledger-data">${JSON.stringify(rows).replace(/</g, '\\u003c')}</script><script>${LEDGER_JS}</script>`;
+}
 function listPage() {
   const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
   return page({
@@ -335,7 +402,7 @@ ${header()}
 ${classStrip()}
 ${marketActivityHtml()}
 ${latestNewsHtml()}
-<div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>
+${ledgerSwitch('xrpl', `<div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>`)}
 <p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>` });
 }
 
@@ -414,6 +481,7 @@ function newsIndexPage(): string {
     body: `<div class="legal"><h1>Tokenized commodities news</h1>
 <p class="answer">${NEWS_LINE}</p>
 <nav class="news-tags" aria-label="Tags">${tags}</nav>
+${newsLedgerTabs()}
 ${newsSignupHtml()}
 ${days.map(day => `<h2>${esc(newsLongDay(day.date))}</h2>${day.items.map(item => newsCard(item, 'h3')).join('')}`).join('') || '<p>No news has been published yet.</p>'}
 <p>${week ? `<a href="/news/week/${esc(week.week)}">Weekly roundups</a> · ` : ''}<a href="/news/archive">News archive</a></p>
@@ -699,7 +767,13 @@ const METHODOLOGY = () => `
 <li><b>Not proof of reserves.</b> On-ledger supply shows how many tokens exist, not how much metal or other commodity backs them.</li>
 <li><b>Not investment advice.</b> Comparison labels and the legacy overall are not ratings, recommendations, or opinions on solvency. Do your own research and confirm with the issuer and an independent explorer. See the full <a href="/disclaimer">disclaimer</a>.</li>
 </ul>
-<p>Short answers to common questions are on the <a href="/faq">FAQ</a>.</p>`;
+<p>Short answers to common questions are on the <a href="/faq">FAQ</a>.</p>
+
+<h2>Solana and Stellar</h2>
+<p>The home page defaults to the XRP Ledger. Solana and Stellar are separate readings. A failed read on one ledger does not change the others.</p>
+<p><b>Solana.</b> Supply and mint or freeze authority come from a public Solana RPC (<code>getTokenSupply</code> and <code>getAccountInfo</code>). Holder counts need an indexer. When <code>SOLANA_INDEXER_URL</code> is unset, holders are <b>not available</b>. That gap is not a penalty. A mint or freeze authority is an issuer control, the same kind of fact as an XRPL flag. It is not an event.</p>
+<p><b>Stellar.</b> A classic asset is read from Horizon: supply, trustlines, and the issuer flags AUTH_REQUIRED, AUTHORIZATION_REVOCABLE, and CLAWBACK. A SEP-41 contract supply is a Soroban <code>total_supply</code> call. Contract controls such as a blocklist are <b>n/a</b> here. Trustlines are accounts, not proof of metal.</p>
+<p><b>Price vs spot</b> on these ledgers is <b>not available</b>. ReserveWatch still shows the public spot gold price as context. It does not treat that price as the token's trading price. Bridged tokens are labeled bridged. None of these readings is a vault check, an audit, or a reason to buy or sell.</p>`;
 
 const ABOUT = () => `
 <p><b>${SITE_NAME} is an independent, issuer-neutral XRPL commodity reserve monitor.</b> It reads public XRP Ledger data for tokens that say they represent a commodity — today ${trackedClassList()} — and compares issuer controls, liquidity, and public verification. The legacy OK / WARN / CRITICAL overall is still published, separately, as the worst raw check.</p>
@@ -1320,7 +1394,62 @@ const commodityJson = (c: ClassPage) => ({
 
 /** Live JSON keeps status and checks exactly as measured. presentation is additive. */
 function publicToken(t: TokenReport) {
-  return { ...t, presentation: viewOf(t) };
+  return { ...t, ledger: t.ledger ?? 'xrpl', presentation: viewOf(t) };
+}
+function ledgerPage(which: LedgerTab) {
+  const copy = LEDGER_COPY[which];
+  const rows = switchRows().filter(row => which === 'all' || row.ledger === which);
+  const path = `/ledger/${which}`;
+  const news = which === 'all' ? '' : ledgerNewsBlock(which);
+  return page({
+    title: copy.title, description: copy.description, path,
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: copy.title.replace(/ · ReserveWatch$/, ''), path }]),
+      { '@context': 'https://schema.org', '@type': 'Dataset', name: copy.title.replace(/ · ReserveWatch$/, ''), description: copy.description, url: SITE_URL + path, license: SITE_URL + '/license', creator: orgRef(), publisher: orgRef(), isAccessibleForFree: true, inLanguage: 'en' },
+    ],
+    body: `<div class="legal legal-wide"><h1>${esc(copy.title.replace(/ · ReserveWatch$/, ''))}</h1>
+<p class="answer">Public ledger readings. A number here is not a vault check and not investment advice. Where a check does not apply, it is marked not available.</p>
+${ledgerSwitch(which, ledgerTable(rows, which === 'all'))}
+${news}
+<p class="muted"><a href="/methodology">How each ledger is read</a></p></div>`,
+  });
+}
+function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, live?: ChainReading) {
+  const checks = (live?.checks ?? []).map(c => `<li><b>${esc(c.result)}</b> ${esc(c.message)}</li>`).join('');
+  return page({
+    title: `${token.displayCode} on ${token.ledger} · ReserveWatch`.slice(0, 60),
+    description: `${token.name} on ${token.ledger}. Supply and issuer controls from the public ledger. Not a vault check.`,
+    path: `/token/${token.id}`,
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: token.ledger, path: `/ledger/${token.ledger}` }, { name: token.name, path: `/token/${token.id}` }])],
+    body: `<div class="legal"><p class="crumb"><a href="/ledger/${token.ledger}">${esc(token.ledger)}</a></p><h1>${esc(token.name)}</h1>
+<p class="answer">${esc(token.project)} on ${esc(token.ledger)}.${token.bridged ? ' Bridged.' : ''} ReserveWatch has not checked any vault.</p>
+<ul>
+<li>Address: <code>${esc(token.address)}</code>${token.issuer ? ` · issuer <code>${esc(token.issuer)}</code>` : ''}</li>
+<li>Supply: ${live?.supply == null ? 'not available' : esc(String(live.supply))}</li>
+<li>Holders: ${live?.holders == null ? 'not available' : esc(String(live.holders))}</li>
+<li>Price vs spot: not available${live?.spotUsd != null ? ` · spot gold ${esc(String(live.spotUsd))} USD/oz is context only` : ''}</li>
+</ul>
+${checks ? `<h2>Checks</h2><ul>${checks}</ul>` : '<p>No live reading yet. The token stays listed.</p>'}
+${token.notes.map(n => `<p>${esc(n)}</p>`).join('')}
+<p><a href="${esc(token.explorerUrl)}">Explorer</a> · <a href="${esc(token.sourceUrl)}">Address source</a> · <a href="${esc(token.website)}">Issuer site</a></p>
+<p class="muted"><a href="/disclaimer">Not investment advice and not an audit.</a></p></div>`,
+  });
+}
+function newsLedgerPage(ledger: NewsLedger, pageNo: number): string | null {
+  if (!(NEWS_LEDGERS as readonly string[]).includes(ledger) || !Number.isInteger(pageNo) || pageNo < 1) return null;
+  const all = newsByLedger(ledger);
+  const pages = Math.max(1, Math.ceil(all.length / 30));
+  if (pageNo > pages) return null;
+  const slice = all.slice((pageNo - 1) * 30, pageNo * 30);
+  const label = ledger === 'xrpl' ? 'XRPL' : ledger === 'other' ? 'Other-ledger' : ledger.charAt(0).toUpperCase() + ledger.slice(1);
+  const title = `${label} commodity news · ReserveWatch`;
+  const path = pageNo > 1 ? `/news/ledger/${ledger}?page=${pageNo}` : `/news/ledger/${ledger}`;
+  return page({
+    title, description: describeHeadlines(`${ledger} news: `, slice.map(item => item.headline)), path,
+    noindex: all.length < 5, canonical: true, rss: true,
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: ledger, path: `/news/ledger/${ledger}` }])],
+    body: `<div class="legal"><h1>${esc(title.replace(/ · ReserveWatch$/, ''))}</h1><p class="answer">${NEWS_LINE}</p>${newsLedgerTabs(ledger)}${slice.map(item => newsCard(item, 'h3')).join('') || '<p>No items for this ledger yet.</p>'}${NEWS_FOOT}</div>`,
+  });
 }
 function publicSnap(s: Snapshot) {
   return { ...s, presentationModel: PRESENTATION_MODEL, tokens: s.tokens.map(publicToken) };
@@ -1361,7 +1490,16 @@ app.get('/sitemap.xml', (_q, r) => {
 });
 app.use(express.static(PUBLIC_DIR, { maxAge: '7d', index: false }));
 app.get('/', (_q, r) => { r.send(listPage()); });
+app.get('/ledger/:ledger', (q, r) => {
+  const id = String(q.params.ledger);
+  if (id !== 'xrpl' && id !== 'solana' && id !== 'stellar' && id !== 'all') {
+    return void r.status(404).send(page({ title: 'Not found · ReserveWatch', description: 'This page does not exist on ReserveWatch.', path: q.path, noindex: true, body: '<h1>Not found</h1><p>Unknown ledger. <a href="/">Back to XRPL</a>.</p>' }));
+  }
+  r.send(ledgerPage(id));
+});
 app.get('/token/:id', (q, r) => {
+  const chain = chainTokenById(String(q.params.id));
+  if (chain) return void r.send(chainTokenPage(chain, chainReadings.find(row => row.id === chain.id)));
   const t = snap?.tokens.find(x => x.id === q.params.id);
   if (!t) {
     const def = TOKENS.find(x => x.id === q.params.id);
@@ -1420,6 +1558,13 @@ app.get('/news/archive', (_q, r) => { r.send(newsArchivePage(loadNews())); });
 app.get('/news/week/:week', (q, r) => {
   const html = newsWeekPage(loadNews(), String(q.params.week));
   if (!html) return void r.status(404).send(newsMissing(q.path, 'No roundup for that week.'));
+  r.send(html);
+});
+app.get('/news/ledger/:ledger', (q, r) => {
+  const raw = Array.isArray(q.query.page) ? q.query.page[0] : q.query.page;
+  const pageNo = raw == null || raw === '' ? 1 : Number(raw);
+  const html = newsLedgerPage(String(q.params.ledger) as NewsLedger, pageNo);
+  if (!html) return void r.status(404).send(newsMissing(q.path, 'No news for that ledger.'));
   r.send(html);
 });
 app.get('/news/tag/:tag', (q, r) => {
@@ -1495,8 +1640,19 @@ app.get('/api/commodities/:slug', (q, r) => { const c = CLASS_PAGES.find(x => x.
 app.get('/learn', (_q, r) => { r.send(learnIndex()); });
 app.get('/learn/clawback-freeze-trust-lines', (_q, r) => { r.send(clawbackPillar()); });
 for (const g of LEARN_GUIDES) app.get(`/learn/${g.slug}`, (_q, r) => { r.send(learnGuidePage(g)); });
-app.get('/api/tokens', (_q, r) => { snap ? r.json(publicSnap(snap)) : r.status(503).json({ error: lastError ?? 'warming up' }); });
+app.get('/api/tokens', (q, r) => {
+  const which = String(q.query.ledger || 'xrpl');
+  if (which === 'solana' || which === 'stellar' || which === 'all') {
+    const extra = chainReadings.filter(row => which === 'all' || row.ledger === which).map(row => ({ ...row, ledger: row.ledger }));
+    const xrpl = which === 'all' && snap ? publicSnap(snap).tokens : [];
+    r.json({ ledger: which, updatedAt: extra[0]?.updatedAt ?? snap?.updatedAt ?? null, tokens: [...xrpl, ...extra] });
+    return;
+  }
+  snap ? r.json(publicSnap(snap)) : r.status(503).json({ error: lastError ?? 'warming up' });
+});
 app.get('/api/tokens/:id', (q, r) => {
+  const chain = chainReadings.find(row => row.id === q.params.id);
+  if (chain) return void r.json(chain);
   const t = snap?.tokens.find(x => x.id === q.params.id);
   t ? r.json(publicToken(t)) : r.status(404).json({ error: 'not found' });
 });
