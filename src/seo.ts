@@ -177,7 +177,7 @@ export function llmsTxt(liveFacts?: string): string {
   ];
   return `# ${SITE_NAME}
 
-> ${TAGLINE}. ${DEFAULT_DESCRIPTION}
+> ${DEFAULT_DESCRIPTION}
 
 ${SITE_NAME} reads public ledger data for tokenized assets on XRPL, Solana, and Stellar. The XRP Ledger pages compare three categories: market and peg, issuer controls, and identity / verification. Measured means a reading was taken (not a safety rating and not proof of backing). Feature means an issuer power or holder structure is on, such as clawback, restricted access, or a concentrated holder (not an adverse event, and not risk-free). Not measurable and not confirmed mean the data is missing: no pool is not a broken peg, and an unconfirmed issuer link is not a fraud finding. Caution and Critical are reserved for an active problem or conflicting public records (Global Freeze, a reliable peg far from spot, issuer records that disagree with the account). The legacy OK / WARN / CRITICAL overall is the worst raw check. It is still the API status field and the label stored on historical snapshots. A feature or a gap still makes that legacy overall WARN. It is not a buy or sell rating. "Unverified listing" is the records-conflict case. "Issuer link unconfirmed" is the not-confirmed case. A label is not an allegation. RLUSD and USDV pools are valued at a nominal $1 (issuer-stated peg, not verified).
 

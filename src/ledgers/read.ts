@@ -4,7 +4,7 @@ import { getSpot } from '../spot.js';
 import { CHAIN_TOKENS, type ChainToken } from './registry.js';
 import { fmtNum, parseAquaUsdc, parseHorizonAsset, parseJupiterPrices, parseSolanaHolders, parseSolanaMintAccount, parseSolanaSupply, sorobanSupply, troyOz, type SolanaControls, GRAMS_PER_TROY_OZ } from './parse.js';
 
-export interface ChainCheck { key: string; result: 'ok' | 'feature' | 'na' | 'critical'; message: string }
+export interface ChainCheck { key: string; result: 'ok' | 'feature' | 'na' | 'warn' | 'critical'; message: string }
 
 export interface ChainReading {
   id: string;
@@ -150,6 +150,14 @@ function applyPrice(row: ChainReading, usdPerToken: number | null, liquidity: nu
       : `About ${fmtNum(perOz)} USD per troy oz, within ${fmtNum(abs)}% of spot.`;
 }
 
+function pegGrade(row: ChainReading): ChainCheck['result'] {
+  if (row.pricePerOz == null || row.spotUsd == null || row.liquidityUsd == null || row.liquidityUsd < PEG_LIQ) return 'na';
+  const abs = Math.abs((row.pricePerOz - row.spotUsd) / row.spotUsd);
+  if (abs >= 0.1) return 'critical';
+  if (abs >= 0.03) return 'warn';
+  return 'ok';
+}
+
 function finish(row: ChainReading): ChainReading {
   const checks: ChainCheck[] = [];
   if (row.supply === 0 && row.ledger === 'stellar') {
@@ -188,8 +196,7 @@ function finish(row: ChainReading): ChainReading {
     checks.push({ key: 'upgrade', result: 'feature', message: 'The published XAUm contract has a timelocked upgrade. That is an issuer control, not an event.' });
     checks.push({ key: 'roles', result: 'feature', message: 'The published XAUm contract has Owner, Operator, and Revoker roles. Those are issuer controls, not an event.' });
   }
-  const pegResult: ChainCheck['result'] = row.pricePerOz == null ? 'na' : row.liquidityUsd != null && row.liquidityUsd >= PEG_LIQ && row.spotUsd != null && Math.abs((row.pricePerOz - row.spotUsd) / row.spotUsd) >= 0.1 ? 'critical' : 'na';
-  checks.push({ key: 'peg', result: pegResult === 'critical' ? 'critical' : 'na', message: row.pegNote });
+  checks.push({ key: 'peg', result: pegGrade(row), message: row.pegNote });
   if (row.bridged) checks.push({ key: 'bridged', result: 'na', message: 'Marked bridged. The on-ledger supply is the bridged representation, not a separate vault check.' });
   return { ...row, checks };
 }
@@ -315,9 +322,9 @@ export function resetLedgerMemoryForTests(): void {
   priceCache.clear();
 }
 
-export function supplyLabel(supply: number | null, ledger: string, grams: number): string {
+export function supplyLabel(supply: number | null, ledger: string, grams: number, unit = 'tokens'): string {
   if (supply == null) return 'not available';
   if (supply === 0 && ledger === 'stellar') return '0 issued on Stellar';
-  if (!(grams > 0)) return 'n/a';
+  if (!(grams > 0)) return `${fmtNum(supply)} ${unit}`;
   return fmtNum(troyOz(supply, grams));
 }

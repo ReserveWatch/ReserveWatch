@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 import { validateNews } from '../src/content/news.ts';
 import { parseHorizonAsset, parseSolanaMintAccount, sorobanSupply } from '../src/ledgers/parse.ts';
+import { supplyLabel } from '../src/ledgers/read.ts';
 import { readChainLedgers, resetLedgerMemoryForTests } from '../src/ledgers/read.ts';
 import { app } from '../src/server.ts';
 
@@ -50,6 +51,8 @@ test('horizon supply sums the current balance fields and soroban supply uses dec
   assert.equal(controls.permanentDelegate, true);
   assert.equal(controls.pausable, true);
   assert.equal(controls.paused, false);
+  assert.equal(supplyLabel(36948706, 'xrpl', 0, 'MWh'), '36,948,706 MWh');
+  assert.equal(supplyLabel(230900, 'xrpl', 0, 'tokens'), '230,900 tokens');
 });
 
 test('a ledger RPC error does not throw, keeps a later failure on the last good reading, and treats result.error as failure', async () => {
@@ -85,6 +88,17 @@ test('a ledger RPC error does not throw, keeps a later failure on the last good 
   assert.equal(kept?.supply, 1382.364);
   assert.match(kept?.notes.join(' ') ?? '', /as of/);
   assert.equal(kept?.error, 'endpoint unreachable at last check');
+  resetLedgerMemoryForTests();
+  const priced = await readChainLedgers({
+    fetchImpl: (async (url: string) => {
+      if (url.includes('jup.ag')) return new Response(JSON.stringify({ '5GgRAEmv8ZxF2PR5hY72Qs5x1bnQ6UK2RbTPoqJ3wSwW': { usdPrice: 4000, liquidity: 100000 } }), { status: 200 });
+      if (url.includes('solana')) return new Response(JSON.stringify({ result: { value: { uiAmountString: '1', decimals: 6 } } }), { status: 200 });
+      return new Response('{}', { status: 503 });
+    }) as typeof fetch,
+    env, spotUsd: 4008.8, sorobanCall: async () => { throw new Error('fetch failed'); },
+  });
+  const graded = priced.find(row => row.id === 'solana-paxg');
+  assert.equal(graded?.checks.find(c => c.key === 'peg')?.result, 'ok');
 });
 
 test('news ledgers are optional and reject an unknown ledger', () => {
@@ -109,8 +123,15 @@ test('ledger tabs, routes, search text, and the news ledger filter render', asyn
     assert.match(home.html, /toLocaleString\('en-US',\{maximumFractionDigits:2\}\)/);
     const solana = await get('/ledger/solana');
     assert.equal(solana.status, 200);
-    assert.match(solana.html, /PAXG on Solana|PAX Gold/);
-    assert.match(solana.html, /data-ledger="solana"[^>]*aria-current="page"/);
+    assert.match(solana.html, /PAX Gold/);
+    assert.equal(solana.html.includes('No tokens in this view.'), false);
+    const totals = (html: string) => html.match(/id="ledger-totals">([^<]*)/)?.[1] ?? '';
+    assert.equal(totals(solana.html).includes('0 issued on Stellar'), false);
+    const stellar = await get('/ledger/stellar');
+    assert.match(stellar.html, /Matrixdock Gold/);
+    assert.equal(stellar.html.includes('No tokens in this view.'), false);
+    assert.match(totals(stellar.html), /0 issued on Stellar/);
+    assert.equal(totals(home.html).includes('0 issued on Stellar'), false);
     const moved = await get('/ledger/xrpl');
     assert.equal(moved.status, 301);
     assert.equal(moved.location, '/');

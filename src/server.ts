@@ -348,15 +348,16 @@ function switchRows() {
   const xrpl = (snap?.tokens ?? []).map(t => ({
     id: t.id, ledger: 'XRPL', ledgerId: 'xrpl', name: t.name, code: t.displayCode, metal: commodityMeta(t.metal).name,
     grams: t.gramsPerToken, supply: t.supply.circulating, bridged: false,
+    unit: commodityMeta(t.metal).name === 'electricity' ? 'MWh' : 'tokens',
     holders: String(t.holders.nonZero), href: `/token/${t.id}`,
-    countInTotal: t.supply.circulating !== 0,
+    countInTotal: t.knownStatus !== 'unverified' && t.supply.circulating !== 0,
   }));
   const extra = CHAIN_TOKENS.map(token => {
     const live = chainReadings.find(row => row.id === token.id);
     const supply = live?.supply ?? null;
     return {
       id: token.id, ledger: token.ledger === 'solana' ? 'Solana' : 'Stellar', ledgerId: token.ledger,
-      name: token.name, code: token.displayCode, metal: 'gold', grams: token.gramsPerToken, supply, bridged: token.bridged,
+      name: token.name, code: token.displayCode, metal: 'gold', grams: token.gramsPerToken, unit: 'oz', supply, bridged: token.bridged,
       holders: live?.holders == null ? 'not available' : String(live.holders), href: `/token/${token.id}`,
       countInTotal: !(token.ledger === 'stellar' && supply === 0),
     };
@@ -365,7 +366,7 @@ function switchRows() {
 }
 function ledgerTable(rows: ReturnType<typeof switchRows>, showLedger: boolean): string {
   const head = `<tr><th>Token</th>${showLedger ? '<th>Ledger</th>' : ''}<th>Supply (troy oz)</th><th>Holders</th></tr>`;
-  const body = rows.map(row => `<tr data-ledger="${esc(row.ledgerId)}" data-name="${esc(row.name)} ${esc(row.code)} ${esc(row.metal)}"><td><a href="${esc(row.href)}">${esc(row.name)}</a>${row.bridged ? ' <span class="pill">bridged</span>' : ''}</td>${showLedger ? `<td>${esc(row.ledger)}</td>` : ''}<td>${esc(supplyLabel(row.supply, row.ledgerId, row.grams))}</td><td>${esc(row.holders)}</td></tr>`).join('');
+  const body = rows.map(row => `<tr data-ledger="${esc(row.ledgerId)}" data-name="${esc(row.name)} ${esc(row.code)} ${esc(row.metal)}"><td><a href="${esc(row.href)}">${esc(row.name)}</a>${row.bridged ? ' <span class="pill">bridged</span>' : ''}</td>${showLedger ? `<td>${esc(row.ledger)}</td>` : ''}<td>${esc(supplyLabel(row.supply, row.ledgerId, row.grams, row.unit))}</td><td>${esc(row.holders)}</td></tr>`).join('');
   return `<table class="ledger-table"><thead>${head}</thead><tbody>${body || '<tr><td colspan="4">No tokens in this view.</td></tr>'}</tbody></table>`;
 }
 function ledgerNewsBlock(ledger: 'xrpl' | 'solana' | 'stellar'): string {
@@ -373,14 +374,19 @@ function ledgerNewsBlock(ledger: 'xrpl' | 'solana' | 'stellar'): string {
   if (!items.length) return '';
   return `<section class="news-latest" aria-label="Latest news"><h2>Latest news</h2><ul>${items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a> <span class="meta">${esc(item.date)}</span></li>`).join('')}</ul><p><a href="/news/ledger/${ledger}">News for this ledger</a></p></section>`;
 }
-const LEDGER_JS = `(function(){var view=document.getElementById('ledger-view');var raw=document.getElementById('ledger-data');if(!view||!raw)return;var rows=JSON.parse(raw.textContent);var home=view.getAttribute('data-ledger')==='xrpl'?view.innerHTML:'';var metals={gold:1,silver:1,platinum:1,palladium:1,diamonds:1};function text(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}function oz(r){if(r.supply==null)return 'not available';if(r.supply===0&&r.ledgerId==='stellar')return '0 issued on Stellar';if(!(r.grams>0))return 'n/a';return (r.supply*r.grams/31.1034768).toLocaleString('en-US',{maximumFractionDigits:2});}function hit(r,q){if(metals[q])return r.metal===q;return (r.name+' '+r.code+' '+r.ledger+' '+r.metal).toLowerCase().indexOf(q)>=0;}function draw(list,showLedger){var h='<table class="ledger-table"><thead><tr><th>Token</th>'+(showLedger?'<th><button type="button" id="ledger-sort">Ledger</button></th>':'')+'<th>Supply (troy oz)</th><th>Holders</th></tr></thead><tbody>';list.forEach(function(r){h+='<tr><td><a href="'+text(r.href)+'">'+text(r.name)+'</a>'+(r.bridged?' <span class="pill">bridged</span>':'')+'</td>'+(showLedger?'<td>'+text(r.ledger)+'</td>':'')+'<td>'+text(oz(r))+'</td><td>'+text(r.holders)+'</td></tr>';});view.innerHTML=h+'</tbody></table>';var btn=document.getElementById('ledger-sort');if(btn)btn.addEventListener('click',function(){list.sort(function(a,b){return a.ledger<b.ledger?-1:1;});draw(list,true);});}function apply(id,q){var query=(q||'').trim().toLowerCase();var list=rows.filter(function(r){return !query||hit(r,query);});if(query)return draw(list,true);if(id==='xrpl'&&home){view.innerHTML=home;return;}draw(list.filter(function(r){return id==='all'||r.ledgerId===id;}),id==='all');}document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(tab){tab.addEventListener('click',function(e){if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();var id=tab.getAttribute('data-ledger');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');});tab.setAttribute('aria-current','page');apply(id,(document.getElementById('ledger-search')||{}).value);history.pushState({ledger:id},'',tab.getAttribute('href'));});});var box=document.getElementById('ledger-search');if(box)box.addEventListener('input',function(){var on=document.querySelector('.ledger-tabs[role="tablist"] .ledger-tab[aria-current="page"]');apply(on?on.getAttribute('data-ledger'):'all',box.value);});window.addEventListener('popstate',function(){var path=location.pathname;var id=path==='/'?'xrpl':(path.split('/')[2]||'xrpl');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');if(el.getAttribute('data-ledger')===id)el.setAttribute('aria-current','page');});apply(id,'');});})();`;
+const LEDGER_JS = `(function(){var view=document.getElementById('ledger-view');var raw=document.getElementById('ledger-data');if(!view||!raw)return;var rows=JSON.parse(raw.textContent);var home=view.getAttribute('data-ledger')==='xrpl'?view.innerHTML:'';var metals={gold:1,silver:1,platinum:1,palladium:1,diamonds:1};function text(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}function oz(r){if(r.supply==null)return 'not available';if(r.supply===0&&r.ledgerId==='stellar')return '0 issued on Stellar';if(!(r.grams>0))return Number(r.supply).toLocaleString('en-US',{maximumFractionDigits:2})+' '+(r.unit||'tokens');return (r.supply*r.grams/31.1034768).toLocaleString('en-US',{maximumFractionDigits:2});}function hit(r,q){if(metals[q])return r.metal===q;return (r.name+' '+r.code+' '+r.ledger+' '+r.metal).toLowerCase().indexOf(q)>=0;}function draw(list,showLedger){var h='<table class="ledger-table"><thead><tr><th>Token</th>'+(showLedger?'<th><button type="button" id="ledger-sort">Ledger</button></th>':'')+'<th>Supply (troy oz)</th><th>Holders</th></tr></thead><tbody>';list.forEach(function(r){h+='<tr><td><a href="'+text(r.href)+'">'+text(r.name)+'</a>'+(r.bridged?' <span class="pill">bridged</span>':'')+'</td>'+(showLedger?'<td>'+text(r.ledger)+'</td>':'')+'<td>'+text(oz(r))+'</td><td>'+text(r.holders)+'</td></tr>';});view.innerHTML=h+'</tbody></table>';var btn=document.getElementById('ledger-sort');if(btn)btn.addEventListener('click',function(){list.sort(function(a,b){return a.ledger<b.ledger?-1:1;});draw(list,true);});}function apply(id,q){var query=(q||'').trim().toLowerCase();var list=rows.filter(function(r){return !query||hit(r,query);});if(query)return draw(list,true);if(id==='xrpl'&&home){view.innerHTML=home;return;}draw(list.filter(function(r){return id==='all'||r.ledgerId===id;}),id==='all');}document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(tab){tab.addEventListener('click',function(e){if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();var id=tab.getAttribute('data-ledger');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');});tab.setAttribute('aria-current','page');apply(id,(document.getElementById('ledger-search')||{}).value);history.pushState({ledger:id},'',tab.getAttribute('href'));});});var box=document.getElementById('ledger-search');if(box)box.addEventListener('input',function(){var on=document.querySelector('.ledger-tabs[role="tablist"] .ledger-tab[aria-current="page"]');apply(on?on.getAttribute('data-ledger'):'all',box.value);});window.addEventListener('popstate',function(){var path=location.pathname;var id=path==='/'?'xrpl':(path.split('/')[2]||'xrpl');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');if(el.getAttribute('data-ledger')===id)el.setAttribute('aria-current','page');});apply(id,'');});})();`;
 function ledgerSwitch(active: LedgerTab, inner: string): string {
   const rows = switchRows();
   const shown = active === 'all' ? rows : rows.filter(row => row.ledgerId === active);
   const counted = shown.filter(row => row.countInTotal);
-  const ounces = counted.reduce((sum, row) => sum + (typeof row.supply === 'number' && row.grams > 0 ? troyOz(row.supply, row.grams) : 0), 0);
+  const byMetal = new Map<string, number>();
+  for (const row of counted) {
+    if (typeof row.supply === 'number' && row.grams > 0) byMetal.set(row.metal, (byMetal.get(row.metal) ?? 0) + troyOz(row.supply, row.grams));
+  }
+  const metalLine = ['gold', 'silver', 'platinum', 'palladium'].filter(name => byMetal.has(name)).map(name => `${name.charAt(0).toUpperCase()}${name.slice(1)} ${fmtNum(byMetal.get(name)!)} oz`).join(' · ');
   const missing = shown.filter(row => row.holders === 'not available').length;
-  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${counted.length} tokens in the total, about ${fmtNum(ounces)} troy oz where supply was read.${missing ? ` ${missing} with holders not available.` : ''} A token with 0 issued on Stellar stays listed and is left out of this total. Not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script type="application/json" id="ledger-data">${JSON.stringify(rows).replace(/</g, '\\u003c')}</script><script>${LEDGER_JS}</script>`;
+  const zeroNote = active === 'stellar' || active === 'all' ? ' A token with 0 issued on Stellar stays listed and is left out of this total.' : '';
+  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${counted.length} tokens in the total${metalLine ? `: ${metalLine}` : ''}.${missing ? ` ${missing} with holders not available.` : ''}${zeroNote} Not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script type="application/json" id="ledger-data">${JSON.stringify(rows).replace(/</g, '\\u003c')}</script><script>${LEDGER_JS}</script>`;
 }
 function listPage() {
   const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
@@ -1405,7 +1411,7 @@ function publicToken(t: TokenReport) {
 }
 function ledgerPage(which: LedgerTab) {
   const copy = LEDGER_COPY[which];
-  const rows = switchRows().filter(row => which === 'all' || row.ledger === which);
+  const rows = switchRows().filter(row => which === 'all' || row.ledgerId === which);
   const path = `/ledger/${which}`;
   const news = which === 'all' ? '' : ledgerNewsBlock(which);
   return page({
