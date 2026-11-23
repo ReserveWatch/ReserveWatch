@@ -69,9 +69,20 @@ const SAME_AS_STATIC: string[] = [];
 export const SAME_AS: string[] = [...new Set([...SAME_AS_STATIC, ...(process.env.SAME_AS_URLS || '').split(',')]
   .map(u => u.trim()).filter(u => /^https:\/\/[^\s,]+$/.test(u)))];
 
+/** Organization node that can stand alone. Google rejects a creator or publisher that is only an @id. */
+export function orgRef() {
+  return {
+    '@type': 'Organization' as const,
+    '@id': SITE_URL + '/#organization',
+    name: SITE_NAME,
+    url: SITE_URL + '/',
+    logo: { '@type': 'ImageObject' as const, url: abs(LOGO_PATH), width: LOGO_W, height: LOGO_H },
+  };
+}
+
 export const orgLd = (email: string) => ({
-  '@context': 'https://schema.org', '@type': 'Organization', '@id': SITE_URL + '/#organization',
-  name: SITE_NAME, url: SITE_URL + '/', logo: { '@type': 'ImageObject', url: abs(LOGO_PATH), width: LOGO_W, height: LOGO_H },
+  '@context': 'https://schema.org',
+  ...orgRef(),
   slogan: TAGLINE, email,
   contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email, url: abs('/contact'), availableLanguage: 'en' },
   ...(SAME_AS.length ? { sameAs: SAME_AS } : {}),
@@ -80,7 +91,7 @@ export const orgLd = (email: string) => ({
 export const websiteLd = () => ({
   '@context': 'https://schema.org', '@type': 'WebSite', '@id': SITE_URL + '/#website',
   name: SITE_NAME, alternateName: `${SITE_NAME} — ${TAGLINE}`, url: SITE_URL + '/', inLanguage: 'en',
-  description: DEFAULT_DESCRIPTION, publisher: { '@id': SITE_URL + '/#organization' },
+  description: DEFAULT_DESCRIPTION, publisher: orgRef(),
   // No SearchAction: the site has no query search. A made-up search target would be invalid.
 });
 
@@ -101,7 +112,7 @@ export function snapshotsDatasetLd() {
     description: 'Frozen weekly copies of automated XRP Ledger readings for tracked commodity tokens. Legacy OK, WARN, and CRITICAL labels are the worst raw check from that week. They are not rewritten later, and they are not audits or proof of reserves.',
     url: abs('/snapshots'), isAccessibleForFree: true, inLanguage: 'en',
     license: abs(DATA_LICENSE_PATH),
-    creator: { '@id': SITE_URL + '/#organization' },
+    creator: orgRef(), publisher: orgRef(),
     distribution: SNAPSHOTS.map(s => ({ '@type': 'DataDownload', encodingFormat: 'text/html', contentUrl: abs(`/snapshots/${s.week}`) })),
   };
 }
@@ -114,7 +125,7 @@ export const datasetLd = (updatedAt?: string) => ({
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
   license: abs(DATA_LICENSE_PATH),
   keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
-  creator: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
+  creator: orgRef(), publisher: orgRef(),
   ...(updatedAt ? { dateModified: updatedAt } : {}),
   measurementTechnique: 'Automated queries of public XRPL mainnet servers (account_info, gateway_balances, account_lines, amm_info, book_offers) plus a public spot metal price API for gold, silver, platinum and palladium',
   distribution: [{ '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: abs('/api/tokens') }],

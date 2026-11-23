@@ -11,7 +11,7 @@ import { CLASS_PAGES, GROUPS, type ClassPage } from './content/commodities.js';
 import { SNAPSHOTS, type WeeklySnapshot, type SnapToken } from './content/snapshots.js';
 import { BRIEFS, HOW_TO_ADD, type Brief } from './content/briefs.js';
 import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './content/learn.js';
-import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, websiteLd, datasetLd, breadcrumbLd, faqPageLd, tokenThingLd, snapshotsDatasetLd, classPublicPath, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, OG_IMAGE_PATH, type SeoMeta } from './seo.js';
+import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, orgRef, websiteLd, datasetLd, breadcrumbLd, faqPageLd, tokenThingLd, snapshotsDatasetLd, classPublicPath, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, OG_IMAGE_PATH, type SeoMeta } from './seo.js';
 import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
 import { renderDetailLead, renderHomeCard } from './face.js';
 import { activityPlain, industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
@@ -381,7 +381,7 @@ function newsCard(item: NewsItem, level: 'h2' | 'h3'): string {
 function newsArticleLd(item: NewsItem) {
   return {
     '@type': 'NewsArticle', headline: item.headline, description: item.summary, datePublished: item.publishedAt,
-    dateModified: item.correction?.date ?? item.publishedAt, url: SITE_URL + newsItemPath(item), author: newsOrg, publisher: newsOrg,
+    dateModified: item.correction?.date ?? item.publishedAt, url: SITE_URL + newsItemPath(item), author: newsOrg, publisher: orgRef(),
     isBasedOn: item.source.url, citation: item.confirmedBy.map(c => c.url), about: item.tags, isAccessibleForFree: true, inLanguage: 'en', image: SITE_URL + OG_IMAGE_PATH,
   };
 }
@@ -460,7 +460,7 @@ function newsWeekPage(doc: NewsFile, id: string): string | null {
     path: `/news/week/${week.week}`, ogType: 'article', rss: true,
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: h1, path: `/news/week/${week.week}` }]),
-      { '@context': 'https://schema.org', '@type': 'NewsArticle', headline: h1, description: clipAtWord(`${week.title}. ${week.intro}`), datePublished: week.date, author: newsOrg, publisher: newsOrg, hasPart: items.map(item => ({ '@type': 'NewsArticle', headline: item.headline, url: SITE_URL + newsItemPath(item) })), ...(shot ? { isBasedOn: SITE_URL + shot } : {}), isAccessibleForFree: true, inLanguage: 'en', image: SITE_URL + OG_IMAGE_PATH },
+      { '@context': 'https://schema.org', '@type': 'NewsArticle', headline: h1, description: clipAtWord(`${week.title}. ${week.intro}`), datePublished: week.date, author: newsOrg, publisher: orgRef(), hasPart: items.map(item => ({ '@type': 'NewsArticle', headline: item.headline, url: SITE_URL + newsItemPath(item) })), ...(shot ? { isBasedOn: SITE_URL + shot } : {}), isAccessibleForFree: true, inLanguage: 'en', image: SITE_URL + OG_IMAGE_PATH },
     ],
     body: `<div class="legal"><h1>${esc(h1)}</h1><p class="answer">${esc(week.intro)}</p>${items.map(item => `<article class="news-item"><h2><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a></h2><p>${esc(item.summary)}</p><p>Source: <a rel="noopener" href="${esc(item.source.url)}">${esc(item.source.name)}</a></p></article>`).join('')}<h2>On the ledger this week</h2><ul>${week.ledgerNotes.map(note => `<li>${esc(note)}</li>`).join('')}</ul>${shot ? `<p><a href="${esc(shot)}">Ledger snapshot ${esc(week.snapshot)}</a></p>` : ''}${newsSignupHtml()}${NEWS_FOOT}</div>`,
   });
@@ -912,7 +912,7 @@ ${why.length ? `<p style="margin:8px 0 0"><b>Why:</b></p><ul>${why.map(c => `<li
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Weekly snapshots', path: '/snapshots' }, { name: `Snapshot #${snapNo(s)} — ${longDate(s.week)}`, path: snapPath(s) }]),
       { '@context': 'https://schema.org', '@type': 'Article', headline: title, description: snapDescription(s), datePublished: s.capturedAt, dateModified: s.capturedAt,
-        mainEntityOfPage: SITE_URL + snapPath(s), author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' }, isBasedOn: SITE_URL + '/api/tokens' },
+        mainEntityOfPage: SITE_URL + snapPath(s), author: { '@id': SITE_URL + '/#organization' }, publisher: orgRef(), isBasedOn: SITE_URL + '/api/tokens' },
     ],
     body: `<div class="legal" style="max-width:980px"><h1>${esc(title)}</h1>
 <p class="muted">ISO week ${esc(s.isoWeek)} · readings captured ${esc(s.capturedAt)} (${esc(etTime(s.capturedAt))}) · XRPL ledger ~${esc(s.ledgerIndex)} · XRP/USD ${usd(s.xrpUsd, 4)}</p>
@@ -992,7 +992,7 @@ function learnGuidePage(g: LearnGuide) {
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Learn', path: '/learn' }, { name: g.crumb, path }]),
       { '@context': 'https://schema.org', '@type': 'Article', headline: g.h1, description: g.description, datePublished: g.datePublished, dateModified: g.dateModified,
-        mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' } },
+        mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: orgRef() },
       ...(g.extraLd?.(SITE_URL + path) ?? []),
       ...(g.faq ? [faqPageLd(g.faq(ctx))] : []),
     ],
@@ -1030,7 +1030,7 @@ function clawbackPillar() {
     jsonLd: [
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Learn', path: '/learn' }, { name: 'Clawback, freeze and trust lines', path }]),
       { '@context': 'https://schema.org', '@type': 'Article', headline: h1, description, datePublished: '2026-10-30', dateModified: COMPARE_UPDATED_ISO,
-        mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' } },
+        mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: orgRef() },
       faqPageLd(CLAWBACK_FAQ),
     ],
     body: `<div class="legal"><h1>${esc(h1)}</h1><p class="muted">Last updated ${COMPARE_UPDATED}</p>
@@ -1109,7 +1109,7 @@ function commoditiesIndex() {
     path: '/commodities',
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }]),
       { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Tokenized commodities on the XRP Ledger', url: SITE_URL + '/commodities',
-        hasPart: CLASS_PAGES.map(c => ({ '@type': 'WebPage', name: c.h1, url: SITE_URL + classHref(c.slug) })), publisher: { '@id': SITE_URL + '/#organization' } }],
+        hasPart: CLASS_PAGES.map(c => ({ '@type': 'WebPage', name: c.h1, url: SITE_URL + classHref(c.slug) })), publisher: orgRef() }],
     body: `<div class="legal"><h1>Tokenized commodities on the XRP Ledger</h1>
 <p class="notice"><b>Short version:</b> A commodity token is an IOU on the XRP Ledger that says it stands for something physical — gold, a megawatt-hour of electricity, a collection of diamonds, a silo of grain. The ledger can show how many tokens exist, who holds them and what the issuer is allowed to do (freeze, claw back). It <b>cannot</b> show that the physical goods exist. ReserveWatch reads the ledger part, honestly, for every class. Not investment advice; not an audit or proof of reserves.</p>
 <p>Today ReserveWatch runs live checks on <b>${TOKENS.length}</b> XRPL tokens across <b>${live.length}</b> classes (${esc(trackedClassList())}). Every other class below has an explainer page that says plainly when no public XRPL issuer is tracked yet — we add a token only when its issuer account can be confirmed on XRPL mainnet.</p>
@@ -1157,7 +1157,7 @@ function commodityPage(c: ClassPage) {
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Commodities', path: '/commodities' }, { name: cap(classLabel(c)), path }]),
       ...(classFaqs.length ? [faqPageLd(classFaqs)] : []),
       { '@context': 'https://schema.org', '@type': 'Article', headline: c.h1, description: c.description, datePublished: '2026-10-30', dateModified: LEGAL_UPDATED_ISO,
-        mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
+        mainEntityOfPage: SITE_URL + path, author: { '@id': SITE_URL + '/#organization' }, publisher: orgRef(),
         about: { '@type': 'Thing', name: meta.title } },
     ],
     body: `<div class="legal legal-wide"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
@@ -1208,7 +1208,7 @@ function briefPage(b: Brief) {
         dateModified: b.asOf ?? `${b.date}T17:00:00.000Z`,
         mainEntityOfPage: SITE_URL + briefPath(b),
         author: { '@id': SITE_URL + '/#organization' },
-        publisher: { '@id': SITE_URL + '/#organization' },
+        publisher: orgRef(),
         about: b.tokenIds.map(id => SITE_URL + '/token/' + id),
         isBasedOn: SITE_URL + '/api/tokens',
       },
@@ -1386,7 +1386,7 @@ app.get('/independent', (_q, r) => { r.send(page({
   jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Independence', path: '/independent' }]), {
     '@context': 'https://schema.org', '@type': 'AboutPage', '@id': SITE_URL + '/independent#page', url: SITE_URL + '/independent',
     name: 'ReserveWatch independence statement', description: INDEPENDENT_DESC, inLanguage: 'en', dateModified: LEGAL_UPDATED_ISO,
-    about: { '@id': SITE_URL + '/#organization' }, isPartOf: { '@id': SITE_URL + '/#website' }, publisher: { '@id': SITE_URL + '/#organization' },
+    about: { '@id': SITE_URL + '/#organization' }, isPartOf: { '@id': SITE_URL + '/#website' }, publisher: orgRef(),
     significantLink: [SITE_URL + '/methodology', SITE_URL + '/disclaimer', SITE_URL + '/about'],
   }],
   body: `<div class="legal"><h1>Independent by design</h1><p class="muted">Last updated ${COMPARE_UPDATED}</p>${INDEPENDENT()}</div>` })); });
