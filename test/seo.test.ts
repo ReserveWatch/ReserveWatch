@@ -1,9 +1,62 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 import { XMLParser } from './xml-parser.ts';
 import { classPublicPath, datasetLd, llmsTxt, sitemapXml, snapshotsDatasetLd, tokenThingLd } from '../src/seo.ts';
+import { SNAPSHOTS } from '../src/content/snapshots.ts';
+import { app } from '../src/server.ts';
 import { badgeEmbed, badgeSvg } from '../src/badge.ts';
 import { stateAnswer, summarizeState } from '../src/state.ts';
+
+function assertOrg(node: unknown, where: string) {
+  const org = node as { '@type'?: string; '@id'?: string; name?: string; url?: string; logo?: { '@type'?: string; url?: string } };
+  assert.equal(org?.['@type'], 'Organization', where);
+  assert.equal(org.name, 'ReserveWatch', where);
+  assert.equal(org.url, 'https://thereservewatch.com/', where);
+  assert.equal(org['@id'], 'https://thereservewatch.com/#organization', where);
+  assert.equal(org.logo?.['@type'], 'ImageObject', where);
+  assert.equal(org.logo?.url, 'https://thereservewatch.com/logo.png', where);
+}
+
+test('Dataset creator and publisher are a typed Organization', async () => {
+  for (const built of [datasetLd(), snapshotsDatasetLd()]) {
+    assertOrg(built.creator, 'builder creator');
+    assertOrg(built.publisher, 'builder publisher');
+    assert.equal(built.license, 'https://thereservewatch.com/license');
+  }
+  const server = http.createServer(app);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+  const port = (server.address() as AddressInfo).port;
+  const required = new Set(['/', '/state', '/snapshots']);
+  const paths = ['/', '/state', '/snapshots', `/snapshots/${SNAPSHOTS[0].week}`, '/diamonds', '/commodities', '/news/2026-11-20'];
+  try {
+    for (const path of paths) {
+      const html = await (await fetch(`http://127.0.0.1:${port}${path}`)).text();
+      const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
+      let datasets = 0;
+      const walk = (node: unknown) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(walk); return; }
+        const record = node as Record<string, unknown>;
+        const type = record['@type'];
+        const types = Array.isArray(type) ? type : [type];
+        if (types.includes('Dataset')) {
+          datasets += 1;
+          assertOrg(record.creator, `${path} creator`);
+          assertOrg(record.publisher, `${path} publisher`);
+        }
+        if ('publisher' in record && !types.includes('Organization')) assertOrg(record.publisher, `${path} publisher`);
+        if ('creator' in record) assertOrg(record.creator, `${path} creator`);
+        for (const value of Object.values(record)) walk(value);
+      };
+      blocks.forEach(walk);
+      if (required.has(path)) assert.ok(datasets > 0, `${path} has a Dataset`);
+    }
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
 
 test('Dataset JSON-LD names the public reuse page as its license', () => {
   assert.equal(datasetLd().license, 'https://thereservewatch.com/license');

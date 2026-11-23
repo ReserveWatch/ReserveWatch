@@ -1,6 +1,7 @@
 // Lightweight on-site SEO helpers for ReserveWatch: canonical URLs, meta/OG/Twitter tags,
 // JSON-LD, robots.txt and sitemap.xml. No dependencies; everything is server-rendered strings.
 import { TOKENS } from './config/tokens.js';
+import { loadNews, NEWS_TAGS, newsByTag, newsDays, type NewsFile } from './content/news.js';
 import { SNAPSHOTS } from './content/snapshots.js';
 import { CLASS_PAGES } from './content/commodities.js';
 import { LEARN_GUIDES } from './content/learn.js';
@@ -32,6 +33,10 @@ export interface SeoMeta {
   path: string;
   ogType?: 'website' | 'article';
   noindex?: boolean;
+  /** Emit a canonical link even when the page is noindex (tag pages under five items). */
+  canonical?: boolean;
+  /** News pages link the RSS feed. */
+  rss?: boolean;
   jsonLd?: object[];
 }
 
@@ -40,9 +45,13 @@ export function seoHead(m: SeoMeta): string {
   const url = abs(m.path);
   const img = abs(OG_IMAGE_PATH);
   const ld = (m.jsonLd ?? []).map(o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`).join('');
+  const robots = m.noindex ? 'noindex,follow' : 'index,follow,max-image-preview:large';
+  const canonical = !m.noindex || m.canonical ? `<link rel="canonical" href="${escAttr(url)}">` : '';
+  const feed = m.rss ? '<link rel="alternate" type="application/rss+xml" title="ReserveWatch news" href="/news/feed.xml">' : '';
   return `<title>${escAttr(m.title)}</title>
 <meta name="description" content="${escAttr(m.description)}">
-${m.noindex ? '<meta name="robots" content="noindex,follow">' : `<link rel="canonical" href="${escAttr(url)}"><meta name="robots" content="index,follow,max-image-preview:large">`}
+${canonical}<meta name="robots" content="${robots}">
+${feed}
 <meta property="og:site_name" content="${SITE_NAME}"><meta property="og:type" content="${m.ogType ?? 'website'}"><meta property="og:locale" content="en_US">
 <meta property="og:title" content="${escAttr(m.title)}"><meta property="og:description" content="${escAttr(m.description)}"><meta property="og:url" content="${escAttr(url)}">
 <meta property="og:image" content="${img}"><meta property="og:image:width" content="${OG_IMAGE_W}"><meta property="og:image:height" content="${OG_IMAGE_H}"><meta property="og:image:type" content="image/png"><meta property="og:image:alt" content="${SITE_NAME} — ${TAGLINE}">
@@ -60,9 +69,20 @@ const SAME_AS_STATIC: string[] = [];
 export const SAME_AS: string[] = [...new Set([...SAME_AS_STATIC, ...(process.env.SAME_AS_URLS || '').split(',')]
   .map(u => u.trim()).filter(u => /^https:\/\/[^\s,]+$/.test(u)))];
 
+/** Organization node that can stand alone. Google rejects a creator or publisher that is only an @id. */
+export function orgRef() {
+  return {
+    '@type': 'Organization' as const,
+    '@id': SITE_URL + '/#organization',
+    name: SITE_NAME,
+    url: SITE_URL + '/',
+    logo: { '@type': 'ImageObject' as const, url: abs(LOGO_PATH), width: LOGO_W, height: LOGO_H },
+  };
+}
+
 export const orgLd = (email: string) => ({
-  '@context': 'https://schema.org', '@type': 'Organization', '@id': SITE_URL + '/#organization',
-  name: SITE_NAME, url: SITE_URL + '/', logo: { '@type': 'ImageObject', url: abs(LOGO_PATH), width: LOGO_W, height: LOGO_H },
+  '@context': 'https://schema.org',
+  ...orgRef(),
   slogan: TAGLINE, email,
   contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email, url: abs('/contact'), availableLanguage: 'en' },
   ...(SAME_AS.length ? { sameAs: SAME_AS } : {}),
@@ -71,7 +91,7 @@ export const orgLd = (email: string) => ({
 export const websiteLd = () => ({
   '@context': 'https://schema.org', '@type': 'WebSite', '@id': SITE_URL + '/#website',
   name: SITE_NAME, alternateName: `${SITE_NAME} — ${TAGLINE}`, url: SITE_URL + '/', inLanguage: 'en',
-  description: DEFAULT_DESCRIPTION, publisher: { '@id': SITE_URL + '/#organization' },
+  description: DEFAULT_DESCRIPTION, publisher: orgRef(),
   // No SearchAction: the site has no query search. A made-up search target would be invalid.
 });
 
@@ -92,7 +112,7 @@ export function snapshotsDatasetLd() {
     description: 'Frozen weekly copies of automated XRP Ledger readings for tracked commodity tokens. Legacy OK, WARN, and CRITICAL labels are the worst raw check from that week. They are not rewritten later, and they are not audits or proof of reserves.',
     url: abs('/snapshots'), isAccessibleForFree: true, inLanguage: 'en',
     license: abs(DATA_LICENSE_PATH),
-    creator: { '@id': SITE_URL + '/#organization' },
+    creator: orgRef(), publisher: orgRef(),
     distribution: SNAPSHOTS.map(s => ({ '@type': 'DataDownload', encodingFormat: 'text/html', contentUrl: abs(`/snapshots/${s.week}`) })),
   };
 }
@@ -105,7 +125,7 @@ export const datasetLd = (updatedAt?: string) => ({
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
   license: abs(DATA_LICENSE_PATH),
   keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
-  creator: { '@id': SITE_URL + '/#organization' }, publisher: { '@id': SITE_URL + '/#organization' },
+  creator: orgRef(), publisher: orgRef(),
   ...(updatedAt ? { dateModified: updatedAt } : {}),
   measurementTechnique: 'Automated queries of public XRPL mainnet servers (account_info, gateway_balances, account_lines, amm_info, book_offers) plus a public spot metal price API for gold, silver, platinum and palladium',
   distribution: [{ '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: abs('/api/tokens') }],
@@ -182,6 +202,7 @@ ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
 ${CLASS_PAGES.filter(c => TOKENS.some(t => c.codes.includes(t.metal))).map(c => `- [${c.h1}](${abs(classPublicPath(c.slug))}): tracked ${c.slug} tokens with live readings.`).join('\n')}
 - [Weekly snapshots](${abs('/snapshots')}): frozen weekly copies of the automated checks. Each week: ${abs('/snapshots')}/{YYYY-MM-DD}.
 - [Briefs](${abs('/briefs')}): short dated notes when a new commodity issuer appears or a CRITICAL / soft-label situation is worth documenting. Each brief: ${abs('/briefs')}/{slug}.
+News: /news (daily summaries with sources), RSS /news/feed.xml, JSON /api/news
 - [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
 - [Independence](${abs('/independent')}): not a custodian, issuer, vault auditor, or investment advice.
 - [Dataset JSON API](${abs('/api/tokens')}): free JSON readings (application/json). Free to cite.
@@ -198,7 +219,9 @@ Corrections: ${abs('/contact')}
 }
 
 /** Sitemap of key public URLs. `lastmod` = YYYY-MM-DD; live pages use the latest snapshot date. */
-export function sitemapXml(liveDate: string, legalDate: string): string {
+export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile = loadNews()): string {
+  const days = newsDays(news);
+  const newest = days[0]?.date ?? legalDate;
   const urls: { loc: string; lastmod: string; changefreq: string; priority: string }[] = [
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
@@ -211,6 +234,11 @@ export function sitemapXml(liveDate: string, legalDate: string): string {
     { loc: abs('/alerts'), lastmod: liveDate, changefreq: 'daily', priority: '0.5' },
     { loc: abs('/snapshots'), lastmod: SNAPSHOTS[0]?.week ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...SNAPSHOTS.map(s => ({ loc: abs(`/snapshots/${s.week}`), lastmod: s.week, changefreq: 'yearly', priority: '0.5' })),
+    { loc: abs('/news'), lastmod: newest, changefreq: 'daily', priority: '0.7' },
+    { loc: abs('/news/archive'), lastmod: newest, changefreq: 'weekly', priority: '0.5' },
+    ...days.map(d => ({ loc: abs(`/news/${d.date}`), lastmod: d.date, changefreq: 'weekly', priority: '0.5' })),
+    ...[...news.weeks].sort((a, b) => a.date < b.date ? 1 : -1).map(w => ({ loc: abs(`/news/week/${w.week}`), lastmod: w.date, changefreq: 'weekly', priority: '0.6' })),
+    ...NEWS_TAGS.filter(tag => newsByTag(tag, news).length >= 5).map(tag => ({ loc: abs(`/news/tag/${tag}`), lastmod: newsByTag(tag, news)[0]?.date ?? newest, changefreq: 'weekly', priority: '0.4' })),
     { loc: abs('/briefs'), lastmod: BRIEFS[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...BRIEFS.map(b => ({ loc: abs(`/briefs/${b.slug}`), lastmod: b.date, changefreq: 'yearly', priority: '0.5' })),
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },
