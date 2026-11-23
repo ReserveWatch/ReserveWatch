@@ -274,7 +274,7 @@ ${o.refresh ? '<script>setTimeout(function(){location.reload()},60000)</script>'
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — XRPL Commodity Reserve Health Monitor" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — On-chain reserve health for tokenized assets" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
 <footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/news">News</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
@@ -776,7 +776,7 @@ const METHODOLOGY = () => `
 <p><b>Price vs spot</b> on these ledgers is <b>not available</b>. ReserveWatch still shows the public spot gold price as context. It does not treat that price as the token's trading price. Bridged tokens are labeled bridged. None of these readings is a vault check, an audit, or a reason to buy or sell.</p>`;
 
 const ABOUT = () => `
-<p><b>${SITE_NAME} is an independent, issuer-neutral XRPL commodity reserve monitor.</b> It reads public XRP Ledger data for tokens that say they represent a commodity — today ${trackedClassList()} — and compares issuer controls, liquidity, and public verification. The legacy OK / WARN / CRITICAL overall is still published, separately, as the worst raw check.</p>
+<p><b>${SITE_NAME}. ${TAGLINE}.</b> It reads public XRP Ledger data for tokens that say they represent a commodity — today ${trackedClassList()} — and compares issuer controls, liquidity, and public verification. The legacy OK / WARN / CRITICAL overall is still published, separately, as the worst raw check.</p>
 
 <h2>What it watches</h2>
 <p>Right now ${SITE_NAME} tracks ${TOKENS.length} commodity tokens on the XRP Ledger:</p>
@@ -799,7 +799,7 @@ const ABOUT = () => `
 <p>Issuers, data users and press can reach us at ${mail()}. See the <a href="/contact">contact page</a> for what to include with a correction or verification request.</p>`;
 
 const INDEPENDENT = () => `
-<p class="notice"><b>${SITE_NAME} is an independent ${TAGLINE.toLowerCase()}.</b> We read public XRP Ledger data about commodity tokens and explain what it shows, in plain language. We are <b>not a custodian, not an issuer, not a vault auditor, and not investment advice.</b></p>
+<p class="notice"><b>${SITE_NAME}. ${TAGLINE}.</b> We read public XRP Ledger data about commodity tokens and explain what it shows, in plain language. We are <b>not a custodian, not an issuer, not a vault auditor, and not investment advice.</b></p>
 
 <h2>What we are</h2>
 <ul>

@@ -1,4 +1,4 @@
-# ReserveWatch — XRPL commodity reserve health monitor
+# ReserveWatch — On-chain reserve health for tokenized assets
 
 Source for [https://thereservewatch.com](https://thereservewatch.com).
 

@@ -10,7 +10,7 @@ import { BRIEFS } from './content/briefs.js';
 
 export const SITE_URL = (process.env.SITE_URL || 'https://thereservewatch.com').replace(/\/+$/, '');
 export const SITE_NAME = 'ReserveWatch';
-export const TAGLINE = 'XRPL Commodity Reserve Health Monitor';
+export const TAGLINE = 'On-chain reserve health for tokenized assets';
 export const BRAND_NAVY = '#0B1F33';
 export const LOGO_PATH = '/logo.png';
 export const LOGO_W = 1200;
@@ -84,7 +84,7 @@ export function orgRef() {
 export const orgLd = (email: string) => ({
   '@context': 'https://schema.org',
   ...orgRef(),
-  slogan: TAGLINE, email,
+  slogan: TAGLINE, description: TAGLINE, email,
   contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email, url: abs('/contact'), availableLanguage: 'en' },
   ...(SAME_AS.length ? { sameAs: SAME_AS } : {}),
 });
@@ -92,7 +92,7 @@ export const orgLd = (email: string) => ({
 export const websiteLd = () => ({
   '@context': 'https://schema.org', '@type': 'WebSite', '@id': SITE_URL + '/#website',
   name: SITE_NAME, alternateName: `${SITE_NAME} — ${TAGLINE}`, url: SITE_URL + '/', inLanguage: 'en',
-  description: DEFAULT_DESCRIPTION, publisher: orgRef(),
+  description: `${TAGLINE}. ${DEFAULT_DESCRIPTION}`, publisher: orgRef(),
   // No SearchAction: the site has no query search. A made-up search target would be invalid.
 });
 

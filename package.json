@@ -1,7 +1,7 @@
 {
   "name": "xrpl-health-monitor",
   "version": "1.0.0",
-  "description": "XRPL commodity-token (gold) health monitor MVP",
+  "description": "On-chain reserve health for tokenized assets",
   "homepage": "https://thereservewatch.com",
   "main": "dist/server.js",
   "scripts": {
