@@ -236,7 +236,7 @@ async function readSolana(token: ChainToken, fetchImpl: FetchLike, env: NodeJS.P
       row.holders = parseSolanaHolders(body);
       row.holdersNote = row.holders == null ? 'The indexer did not return a holder count.' : '';
     } catch (e) { row.holdersNote = `Holder count not available (${unreachable(e)}).`; }
-  } else row.holdersNote = 'Not available. The public Solana RPC does not return holder counts. SOLANA_INDEXER_URL is unset.';
+  } else row.holdersNote = 'Holder count is not available on this ledger yet.';
   applyPrice(row, quote?.usdPrice ?? null, quote?.liquidity ?? null);
   return keep(row);
 }

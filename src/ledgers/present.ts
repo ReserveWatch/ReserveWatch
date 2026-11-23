@@ -121,7 +121,7 @@ function marketItems(row: ChainReading, dev: number | null, graded: ChainCheck['
     const note = row.holdersNote || `${row.holders.toLocaleString('en-US')} holder accounts reported. Not a safety rating.`;
     items.push({ code: 'chain-holders', tone: 'measured', label: `${row.holders.toLocaleString('en-US')} holder accounts`, detail: note });
   } else {
-    items.push(gap('chain-holders-na', 'Holders not available', row.holdersNote || 'Holder count is not available. A missing count is not a penalty.'));
+    items.push(gap('chain-holders-na', 'Holders not available', row.holdersNote || 'Holder count is not available on this ledger yet.'));
   }
 
   if (row.supply === 0 && row.ledger === 'stellar') {
@@ -180,7 +180,7 @@ function identityItems(row: ChainReading): PresentItem[] {
   ));
   items.push(gap(
     'chain-domain-na',
-    CHAIN_NA,
+    'No domain check on this ledger',
     'xrp-ledger.toml and on-ledger Domain checks are not available on this ledger. ReserveWatch does not treat that as a failed verification. The address on this card is the public mint, contract, or asset code.',
   ));
   return items;
@@ -239,7 +239,7 @@ export function placeholderChainReading(token: ChainToken): ChainReading {
     id: token.id, ledger: token.ledger, name: token.name, project: token.project, displayCode: token.displayCode,
     metal: 'gold', gramsPerToken: token.gramsPerToken, bridged: token.bridged, address: token.address, issuer: token.issuer,
     kind: token.kind, explorerUrl: token.explorerUrl, website: token.website,
-    supply: null, holders: null, holdersNote: 'Not available.', mintAuthority: null, freezeAuthority: null,
+    supply: null, holders: null, holdersNote: 'Holder count is not available on this ledger yet.', mintAuthority: null, freezeAuthority: null,
     authRequired: null, revocable: null, clawback: null, controls: null, spotUsd: null, spotSource: '',
     priceUsd: null, pricePerOz: null, liquidityUsd: null,
     pegNote: 'Price vs spot is not available.',

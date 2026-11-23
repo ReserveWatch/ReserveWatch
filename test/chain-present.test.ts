@@ -55,7 +55,7 @@ test('chain adapter uses the comparison model and does not invent a legacy grade
   assert.match(face, /<h3>Identity<\/h3>/);
   assert.match(face, /Mint authority/);
   assert.match(face, /Thin-market price/);
-  assert.match(face, /Not available on this ledger/);
+  assert.match(face, /No domain check on this ledger/);
   assert.match(face, /Legacy overall not available on this ledger/);
   assert.equal(face.includes('peg-mark'), false);
   assert.equal(face.includes('legacy-warn'), false);
@@ -171,6 +171,13 @@ test('ledger pages match the home section order and chain token pages use the de
     assert.match(solana.html, /class="asof"/);
     assert.match(solana.html, /Gold spot/);
     assert.match(solana.html, /Not available on this ledger/);
+    assert.match(solana.html, /No domain check on this ledger/);
+    assert.equal(solana.html.includes('SOLANA_INDEXER_URL'), false);
+    const solanaStrip = solana.html.match(/<nav class="commodities"[\s\S]*?<\/nav>/)?.[0] ?? '';
+    assert.equal(solanaStrip.includes('href='), false);
+    assert.match(solanaStrip, /Gold/);
+    const homeStrip = home.html.match(/<nav class="commodities"[\s\S]*?<\/nav>/)?.[0] ?? '';
+    assert.match(homeStrip, /href="\/gold"|href="\/commodities\/gold"|href="\/commodities"/);
     assert.match(solana.html, /data-name="[^"]*gold/);
     assert.equal(solana.html.includes('preventDefault'), false);
     assert.equal(solana.html.includes('pushState'), false);
