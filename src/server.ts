@@ -275,7 +275,7 @@ ${o.refresh ? '<script>setTimeout(function(){location.reload()},60000)</script>'
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch — On-chain reserve health for tokenized assets" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch: On-chain reserve health for tokenized assets" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
 <footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/news">News</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL, Solana and Stellar readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
@@ -642,7 +642,7 @@ const legalPage = (title: string, path: string, description: string, html: strin
 const mail = () => `<a href="mailto:${esc(CONTACT_EMAIL)}">${esc(CONTACT_EMAIL)}</a>`;
 
 const DISCLAIMER = `
-<p><b>${SITE_NAME} publishes automated readings of public XRP Ledger data. It is not investment, financial, legal, accounting, or tax advice, and it is not a recommendation to buy, sell, or hold any token.</b></p>
+<p><b>${SITE_NAME} publishes automated readings of public XRPL, Solana and Stellar data. It is not investment, financial, legal, accounting, or tax advice, and it is not a recommendation to buy, sell, or hold any token.</b></p>
 <ul>
 <li><b>On-ledger data only.</b> Supply, holders, issuer flags, AMM pools, and order books come from public XRPL servers. Spot prices for gold, silver, platinum and palladium come from a public third-party price API; other commodity classes are not compared with a spot price. ${SITE_NAME} does not audit, inspect, or attest to any vault, custodian, or reserve, and on-ledger supply is not proof of reserves.</li>
 <li><b>Labels are automated readings, not recommendations.</b> The comparison separates measured facts, issuer features (such as clawback or restricted access), and information gaps from active problems. The legacy "OK", "WARN", and "CRITICAL" overall is the worst raw check. A measured reading is not a statement that a token is safe or fully backed. None of these are credit ratings, buy or sell signals, opinions on solvency, or statements about anyone's conduct.</li>
@@ -789,10 +789,10 @@ const METHODOLOGY = () => `
 <p><b>Price vs spot</b> on these ledgers is <b>not available</b>. ReserveWatch still shows the public spot gold price as context. It does not treat that price as the token's trading price. Bridged tokens are labeled bridged. None of these readings is a vault check, an audit, or a reason to buy or sell.</p>`;
 
 const ABOUT = () => `
-<p><b>${SITE_NAME}. ${TAGLINE}.</b> It reads public XRP Ledger data for tokens that say they represent a commodity — today ${trackedClassList()} — and compares issuer controls, liquidity, and public verification. The legacy OK / WARN / CRITICAL overall is still published, separately, as the worst raw check.</p>
+<p><b>${SITE_NAME}. ${TAGLINE}.</b> It reads public XRPL, Solana and Stellar data for tokenized commodities — on the XRP Ledger today ${trackedClassList()} — and compares issuer controls, liquidity, and public verification. The legacy OK / WARN / CRITICAL overall is still published, separately, as the worst raw check.</p>
 
 <h2>What it watches</h2>
-<p>Right now ${SITE_NAME} tracks ${TOKENS.length} commodity tokens on the XRP Ledger:</p>
+<p>Right now ${SITE_NAME} tracks tokenized commodities on XRPL, Solana and Stellar. The XRP Ledger list has ${TOKENS.length} tokens:</p>
 <ul>${TOKENS.map(t => `<li><a href="/token/${esc(t.id)}">${esc(t.name)}</a> <span class="muted">— ${esc(METAL_NAME[t.metal] ?? t.metal)}${t.label ? ` · ${esc(t.label)}` : ''}</span></li>`).join('')}</ul>
 <p>Every other commodity class — palladium, oil, natural gas, uranium, copper, timber, wheat, soybeans, corn, cotton and more — has a plain-language <a href="/commodities">commodity page</a> that says honestly whether any public XRPL issuer exists yet. We add a token only when we can confirm its issuer account on XRPL mainnet.</p>
 <p>For each one it shows circulating supply, issuer control settings (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price compared with spot price (metals only), holder concentration, and whether the issuer's website confirms the issuer. How each check works is explained on the <a href="/methodology">methodology</a> page.</p>
@@ -812,7 +812,7 @@ const ABOUT = () => `
 <p>Issuers, data users and press can reach us at ${mail()}. See the <a href="/contact">contact page</a> for what to include with a correction or verification request.</p>`;
 
 const INDEPENDENT = () => `
-<p class="notice"><b>${SITE_NAME}. ${TAGLINE}.</b> We read public XRP Ledger data about commodity tokens and explain what it shows, in plain language. We are <b>not a custodian, not an issuer, not a vault auditor, and not investment advice.</b></p>
+<p class="notice"><b>${SITE_NAME}. ${TAGLINE}.</b> We read public XRPL, Solana and Stellar data about tokenized commodities and explain what it shows, in plain language. We are <b>not a custodian, not an issuer, not a vault auditor, and not investment advice.</b></p>
 
 <h2>What we are</h2>
 <ul>
@@ -855,7 +855,7 @@ const PRIVACY = () => `
 <p class="notice"><b>Short version:</b> ${SITE_NAME} has no accounts, no wallets, and no login cookies. Our host keeps normal server logs. ${PLAUSIBLE_DOMAIN ? 'We count page views in aggregate with Plausible Analytics, which uses no cookies.' : 'Website analytics are currently <b>off</b>.'} We do not sell personal data.</p>
 
 <h2>What this site is</h2>
-<p>${SITE_NAME} is a public, read-only website and JSON API that shows automated readings of public XRP Ledger data for commodity tokens. You do not need an account. We never ask for wallet seeds, private keys, or payments, and we do not set cookies to log anyone in.</p>
+<p>${SITE_NAME} is a public, read-only website and JSON API that shows automated readings of public XRPL, Solana and Stellar data for tokenized commodities. You do not need an account. We never ask for wallet seeds, private keys, or payments, and we do not set cookies to log anyone in.</p>
 
 <h2>What we collect today</h2>
 <ul>
@@ -1333,7 +1333,7 @@ const FAQ_UPDATED = 'November 18, 2026';
 const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
   {
     q: 'What is ReserveWatch?',
-    a: `${SITE_NAME} is an independent, issuer-neutral monitor of commodity tokens on the XRP Ledger — gold, silver, platinum, energy, diamonds and more. It reads public ledger data and compares three things: issuer controls, liquidity and peg, and public verification of the issuer account. Measured facts, issuer features, and information gaps are labeled separately from active problems. A legacy OK, WARN, or CRITICAL overall is still published as the worst raw check. The same published rules apply to every issuer. It does not tell anyone to buy, sell, or hold a token.`,
+    a: `${SITE_NAME} is an independent, issuer-neutral monitor of tokenized commodities on XRPL, Solana and Stellar — gold, silver, platinum, energy, diamonds and more. It reads public ledger data and compares three things: issuer controls, liquidity and peg, and public verification of the issuer account. Measured facts, issuer features, and information gaps are labeled separately from active problems. A legacy OK, WARN, or CRITICAL overall is still published as the worst raw check. The same published rules apply to every issuer. It does not tell anyone to buy, sell, or hold a token.`,
     more: '<a href="/about">About</a> · <a href="/independent">Independence</a> · <a href="/methodology">Methodology</a>',
   },
   {
@@ -1385,7 +1385,7 @@ function faqPage() {
     ],
     body: `<div class="legal"><h1>Frequently asked questions</h1>
 <p class="muted">Last updated ${FAQ_UPDATED}</p>
-<p class="notice"><b>Short version:</b> ${SITE_NAME} publishes automated readings of public XRP Ledger data. These answers use the same plain words as the <a href="/methodology">methodology</a> and <a href="/learn">learn</a> guides. They are not investment advice, not a vault audit, and not proof of reserves.</p>
+<p class="notice"><b>Short version:</b> ${SITE_NAME} publishes automated readings of public XRPL, Solana and Stellar data. These answers use the same plain words as the <a href="/methodology">methodology</a> and <a href="/learn">learn</a> guides. They are not investment advice, not a vault audit, and not proof of reserves.</p>
 ${blocks.map(b => `<h2>${esc(b.q)}</h2><p>${esc(b.a)}</p><p class="muted">More: ${b.more}</p>`).join('\n')}
 <p class="muted">Related: <a href="/methodology">Methodology</a> · <a href="/briefs">Briefs</a> · <a href="/learn/peg-vs-spot">Peg vs spot</a> · <a href="/learn/unverified-listings">Unverified listings</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback, freeze and trust lines</a> · <a href="/learn/glossary">Glossary</a> · <a href="/learn">All guides</a> · <a href="/api/tokens">JSON API</a> · <a href="/disclaimer">Disclaimer</a></p></div>` });
 }
@@ -1538,7 +1538,7 @@ app.get('/alerts', (_q, r) => {
 });
 app.get('/methodology', (_q, r) => { r.send(infoPage('How readings are labeled · ReserveWatch', 'How readings are labeled', '/methodology', 'How measured facts, issuer controls, and missing data differ from active problems. Not a rating or proof of reserves.', `<p class="answer">ReserveWatch separates measured facts, issuer features, and missing data from active problems. The legacy OK, WARN, or CRITICAL overall is the worst raw check. It is not a buy or sell rating and not proof of reserves.</p>${METHODOLOGY()}${citeLine('/methodology', COMPARE_UPDATED_ISO)}`, COMPARE_UPDATED)); });
 app.get('/faq', (_q, r) => { r.send(faqPage()); });
-app.get('/about', (_q, r) => { r.send(infoPage('About ReserveWatch · ReserveWatch', 'About ReserveWatch', '/about', 'What ReserveWatch watches on the XRP Ledger, and what it does not do. Issuer-neutral public readings. Not advice.', ABOUT(), COMPARE_UPDATED)); });
+app.get('/about', (_q, r) => { r.send(infoPage('About ReserveWatch · ReserveWatch', 'About ReserveWatch', '/about', 'What ReserveWatch watches on XRPL, Solana and Stellar, and what it does not do. Not advice.', ABOUT(), COMPARE_UPDATED)); });
 app.get('/independent', (_q, r) => { r.send(page({
   title: 'Independence · ReserveWatch', description: INDEPENDENT_DESC, path: '/independent', ogType: 'article',
   jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Independence', path: '/independent' }]), {

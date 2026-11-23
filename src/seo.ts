@@ -55,8 +55,8 @@ ${canonical}<meta name="robots" content="${robots}">
 ${feed}
 <meta property="og:site_name" content="${SITE_NAME}"><meta property="og:type" content="${m.ogType ?? 'website'}"><meta property="og:locale" content="en_US">
 <meta property="og:title" content="${escAttr(m.title)}"><meta property="og:description" content="${escAttr(m.description)}"><meta property="og:url" content="${escAttr(url)}">
-<meta property="og:image" content="${img}"><meta property="og:image:width" content="${OG_IMAGE_W}"><meta property="og:image:height" content="${OG_IMAGE_H}"><meta property="og:image:type" content="image/png"><meta property="og:image:alt" content="${SITE_NAME} — ${TAGLINE}">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escAttr(m.title)}"><meta name="twitter:description" content="${escAttr(m.description)}"><meta name="twitter:image" content="${img}"><meta name="twitter:image:alt" content="${SITE_NAME} — ${TAGLINE}">
+<meta property="og:image" content="${img}"><meta property="og:image:width" content="${OG_IMAGE_W}"><meta property="og:image:height" content="${OG_IMAGE_H}"><meta property="og:image:type" content="image/png"><meta property="og:image:alt" content="ReserveWatch: On-chain reserve health for tokenized assets">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escAttr(m.title)}"><meta name="twitter:description" content="${escAttr(m.description)}"><meta name="twitter:image" content="${img}"><meta name="twitter:image:alt" content="ReserveWatch: On-chain reserve health for tokenized assets">
 ${ld}`;
 }
 
@@ -121,8 +121,8 @@ export function snapshotsDatasetLd() {
 /** Dataset: the public JSON API really is a free, machine-readable feed of these readings. */
 export const datasetLd = (updatedAt?: string) => ({
   '@context': 'https://schema.org', '@type': 'Dataset', '@id': SITE_URL + '/#dataset',
-  name: 'XRPL commodity token on-ledger health readings',
-  description: 'Automated readings of public XRP Ledger data for commodity tokens (gold, silver, platinum, energy, diamonds and other classes as issuers appear): circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
+  name: 'On-chain reserve health readings for tokenized assets',
+  description: 'Automated readings of public XRPL, Solana, and Stellar data for tokenized commodities (gold, silver, platinum, energy, diamonds and other classes as issuers appear). On the XRP Ledger the reading includes circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. Solana and Stellar readings cover supply and issuer controls when the public endpoint returns them. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
   license: abs(DATA_LICENSE_PATH),
   keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
