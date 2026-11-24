@@ -127,8 +127,10 @@ test('ledger tabs, routes, search text, and the news ledger filter render', asyn
     assert.match(solana.html, /PAX Gold/);
     assert.equal(solana.html.includes('No tokens in this view.'), false);
     const totals = (html: string) => html.match(/id="ledger-totals">([^<]*)/)?.[1] ?? '';
-    assert.equal(totals(home.html).includes('troy oz'), false);
-    if (/\d/.test(totals(home.html))) assert.match(totals(home.html), /\boz\b/);
+    const homeTotals = totals(home.html);
+    assert.equal(homeTotals.includes('troy oz'), false);
+    // "0 tokens in the total." has a digit and no metal. Oz appears only after the colon: "Gold 1.00 oz".
+    if (homeTotals.includes(' in the total:')) assert.match(homeTotals, /\boz\b/);
     assert.equal(totals(solana.html).includes('0 issued on Stellar'), false);
     const stellar = await get('/ledger/stellar');
     assert.match(stellar.html, /Matrixdock Gold/);
