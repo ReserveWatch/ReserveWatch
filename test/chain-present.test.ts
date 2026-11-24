@@ -174,7 +174,7 @@ test('ledger pages match the home section order and chain token pages use the de
     assert.match(solana.html, /No domain check on this ledger/);
     assert.equal(solana.html.includes('SOLANA_INDEXER_URL'), false);
     const solanaStrip = solana.html.match(/<nav class="commodities"[\s\S]*?<\/nav>/)?.[0] ?? '';
-    assert.equal(solanaStrip.includes('href='), false);
+    assert.match(solanaStrip, /href="\/gold"/);
     assert.match(solanaStrip, /Gold/);
     const homeStrip = home.html.match(/<nav class="commodities"[\s\S]*?<\/nav>/)?.[0] ?? '';
     assert.match(homeStrip, /href="\/gold"|href="\/commodities\/gold"|href="\/commodities"/);
