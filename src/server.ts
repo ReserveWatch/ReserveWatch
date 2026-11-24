@@ -13,14 +13,16 @@ import { BRIEFS, HOW_TO_ADD, type Brief } from './content/briefs.js';
 import { LEARN_GUIDES, CLAWBACK_FAQ, type LearnGuide, type LearnCtx } from './content/learn.js';
 import { seoHead, robotsTxt, sitemapXml, llmsTxt, orgLd, orgRef, websiteLd, datasetLd, breadcrumbLd, faqPageLd, tokenThingLd, snapshotsDatasetLd, classPublicPath, DEFAULT_DESCRIPTION, TAGLINE, SITE_URL, OG_IMAGE_PATH, type SeoMeta } from './seo.js';
 import { presentFromReport, PRESENTATION_MODEL, type PresentItem, type PresentTone } from './presentation.js';
-import { renderDetailLead, renderHomeCard } from './face.js';
+import { renderCardShell, renderDetailLead, renderHomeCard, renderLeadShell } from './face.js';
 import { activityPlain, industryTotal, isoWeek, loadActivities, pctLabel, rememberWeek, unknownActivity, type VolumeWeek } from './volume.js';
 import { stateAnswer, summarizeState, type StateToken } from './state.js';
 import { badgeEmbed, badgeSvg } from './badge.js';
 import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, newsAnchor, newsByLedger, newsByTag, newsDayTitle, newsDays, newsItemPath, newsLongDay, newsMonDay, newsMonths, newsRss, newsTagTitle, newsWeek, newsWeekTitle, NEWS_ARCHIVE_TITLE, NEWS_INDEX_TITLE, NEWS_LEDGERS, NEWS_TAGS, snapshotPath, weekItems, type NewsFile, type NewsItem, type NewsLedger, type NewsTag } from './content/news.js';
 import { CHAIN_TOKENS, chainTokenById } from './ledgers/registry.js';
-import { readChainLedgers, supplyLabel, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, type ChainReading } from './ledgers/read.js';
+import { readChainLedgers, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, type ChainReading } from './ledgers/read.js';
+import { placeholderChainReading, presentFromChain } from './ledgers/present.js';
 import { fmtNum, troyOz } from './ledgers/parse.js';
+import { eventsRss, historySection, readEvents, readingFromChain, readingFromXrpl, recordHistory, supplyThreshold, tokenHistory } from './history.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -48,6 +50,7 @@ try { snap = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'latest.json'), 'utf
 
 async function refresh() {
   if (running) return; running = true;
+  let freshXrpl: TokenReport[] = [];
   try {
     const s = await runSnapshot();
     if (!s.tokens.length) throw new Error('snapshot returned no tokens (XRPL endpoints unreachable?)');
@@ -64,10 +67,16 @@ async function refresh() {
     await processAlerts(s);
     console.log(`[monitor] snapshot ok: ${s.tokens.map(t => `${t.id}=${t.status}`).join(' ')} (${s.durationMs}ms)`);
     void attachVolume(false);
+    freshXrpl = s.tokens;
   } catch (e) { lastError = (e as Error).message; console.error('[monitor] snapshot failed', e); }
-  try { chainReadings = await readChainLedgers(); }
+  let freshChain: ChainReading[] | null = null;
+  try { chainReadings = await readChainLedgers(); freshChain = chainReadings; }
   catch (e) { console.error('[ledgers] read failed', e); }
   finally { running = false; }
+  try {
+    const readings = [...freshXrpl.map(readingFromXrpl), ...(freshChain ?? []).map(readingFromChain)];
+    if (readings.length) recordHistory(readings, { dir: DATA_DIR });
+  } catch (e) { console.error('[history] record failed', e); }
 }
 
 let volumeBusy = false;
@@ -163,8 +172,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var
 .token-card h2{font-size:1.55rem;line-height:1.15;margin:0;overflow-wrap:break-word}
 .token-card h2 a{text-decoration:none}
 .card-sub{margin:.35em 0 0;color:var(--rw-muted);font-size:.92rem}
-.supply{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-.supply b{display:block;font-size:1.35rem;color:var(--rw-navy);font-weight:650}
+.supply{margin:0;text-align:right;font-variant-numeric:tabular-nums;min-width:0;max-width:100%}
+.supply b{display:block;font-size:1.35rem;color:var(--rw-navy);font-weight:650;overflow-wrap:anywhere}
 .supply span{color:var(--rw-muted);font-size:.85rem}
 .groups{display:flex;flex-direction:column;gap:12px}
 .readout{margin:0;font-size:1.02rem;color:var(--rw-navy);font-weight:600}
@@ -246,6 +255,7 @@ footer nav a{font-weight:650;text-decoration:none}
 .ledger-tab[aria-current="page"]{background:var(--rw-navy);color:#fff;border-color:var(--rw-navy)}
 .ledger-dot{width:9px;height:9px;border-radius:50%;background:var(--rw-gold);flex:none}
 .ledger-tab[aria-current="page"] .ledger-dot{background:#fff}
+.token-card[hidden]{display:none}
 .ledger-table{width:100%;border-collapse:collapse}
 .ledger-table th button{background:none;border:0;font:inherit;font-weight:750;cursor:pointer;color:inherit}
 .news-signup{margin:14px 0;padding:12px 14px;border:1px solid var(--rw-border);border-radius:12px}
@@ -301,9 +311,10 @@ function viewOf(t: TokenReport) {
   return presentFromReport(t);
 }
 
-function marketActivityHtml(): string {
+function marketActivityHtml(note = ''): string {
   const m = snap?.marketActivity;
-  if (!m || m.usdTotal == null) return `<section class="activity" aria-label="Market activity"><h2>Market activity</h2><p class="volume">7-day volume not measured.</p></section>`;
+  const preface = note ? `<p class="volume">${esc(note)}</p>` : '';
+  if (!m || m.usdTotal == null) return `<section class="activity" aria-label="Market activity"><h2>Market activity</h2>${preface}<p class="volume">7-day volume not measured.</p></section>`;
   const change = m.direction === 'down' && m.changePct != null ? `Down ${pctLabel(m.changePct)}% vs the prior 7 days`
     : m.direction === 'up' && m.changePct != null ? `Up ${pctLabel(m.changePct)}% vs the prior 7 days`
     : m.direction === 'flat' ? 'About the same as the prior 7 days'
@@ -320,7 +331,7 @@ function marketActivityHtml(): string {
     m.tokensUnpriced ? `${m.tokensUnpriced} traded with no USD price` : '',
     m.changeExcluded ? `${m.changeExcluded} left out of the comparison` : '',
   ].filter(Boolean).join(' · ');
-  return `<section class="activity" aria-label="Market activity"><div><h2>Market activity</h2><p class="activity-total">${usd(m.usdTotal, 0)} <span>rolling 7-day volume${extra ? ` · ${esc(extra)}` : ''}</span></p><p class="chg">${esc(change)}</p></div>${spark}<details class="fold"><summary>How volume is measured</summary><div class="fold-body"><p>${esc(m.method)}</p><p>${esc(m.historyNote)}</p></div></details></section>`;
+  return `<section class="activity" aria-label="Market activity"><div><h2>Market activity</h2>${preface}<p class="activity-total">${usd(m.usdTotal, 0)} <span>rolling 7-day volume${extra ? ` · ${esc(extra)}` : ''}</span></p><p class="chg">${esc(change)}</p></div>${spark}<details class="fold"><summary>How volume is measured</summary><div class="fold-body"><p>${esc(m.method)}</p><p>${esc(m.historyNote)}</p></div></details></section>`;
 }
 
 type LedgerTab = 'xrpl' | 'solana' | 'stellar' | 'all';
@@ -330,11 +341,25 @@ const LEDGER_TABS: { id: LedgerTab; href: string; label: string }[] = [
   { id: 'stellar', href: '/ledger/stellar', label: 'Stellar' },
   { id: 'all', href: '/ledger/all', label: 'All' },
 ];
-const LEDGER_COPY: Record<LedgerTab, { title: string; description: string }> = {
-  xrpl: { title: 'XRPL commodity tokens · ReserveWatch', description: 'XRPL commodity tokens: issuer controls, supply, and liquidity. Not a vault check and not investment advice.' },
-  solana: { title: 'Solana commodity tokens · ReserveWatch', description: 'Solana commodity-token supply and mint controls. Holders are not available without an indexer. Not a vault check.' },
-  stellar: { title: 'Stellar commodity tokens · ReserveWatch', description: 'Stellar commodity-token supply and issuer flags. Price vs spot is not available. Not a vault check.' },
-  all: { title: 'Commodity tokens, three ledgers · ReserveWatch', description: 'XRPL, Solana, and Stellar commodity tokens in one list. A reading is not a vault check or investment advice.' },
+const LEDGER_COPY: Record<Exclude<LedgerTab, 'xrpl'>, { h1: string; title: string; description: string; lede: string }> = {
+  solana: {
+    h1: 'On-chain reserve health for Solana commodity tokens',
+    title: 'Solana commodity token reserve health · ReserveWatch',
+    description: 'Solana commodity token reserve health: supply, mint controls, and a thin-market price when a public quote exists. Not a vault check.',
+    lede: 'Public readings for commodity tokens on Solana. Each card shows market, issuer controls, and identity. Not a buy or sell list.',
+  },
+  stellar: {
+    h1: 'On-chain reserve health for Stellar commodity tokens',
+    title: 'Stellar commodity token reserve health · ReserveWatch',
+    description: 'Stellar commodity token reserve health: supply, issuer flags, and published contract controls. Not a vault check.',
+    lede: 'Public readings for commodity tokens on Stellar. Each card shows market, issuer controls, and identity. Not a buy or sell list.',
+  },
+  all: {
+    h1: 'On-chain reserve health for commodity tokens on three ledgers',
+    title: 'Commodity token reserve health, three ledgers · ReserveWatch',
+    description: 'XRPL, Solana, and Stellar commodity token reserve health on one board. Not a vault check or a buy or sell rating.',
+    lede: 'Public readings for commodity tokens on XRPL, Solana, and Stellar. Each card names its ledger. Not a buy or sell list.',
+  },
 };
 function ledgerTabs(active: LedgerTab): string {
   return `<nav class="ledger-tabs" role="tablist" aria-label="Ledger">${LEDGER_TABS.map(tab => `<a class="ledger-tab" role="tab" data-ledger="${tab.id}" href="${tab.href}"${tab.id === active ? ' aria-current="page"' : ''}><span class="ledger-dot" aria-hidden="true"></span>${tab.label}</a>`).join('')}</nav>`;
@@ -364,17 +389,37 @@ function switchRows() {
   });
   return [...xrpl, ...extra];
 }
-function ledgerTable(rows: ReturnType<typeof switchRows>, showLedger: boolean): string {
-  const head = `<tr><th>Token</th>${showLedger ? '<th>Ledger</th>' : ''}<th>Supply (troy oz)</th><th>Holders</th></tr>`;
-  const body = rows.map(row => `<tr data-ledger="${esc(row.ledgerId)}" data-name="${esc(row.name)} ${esc(row.code)} ${esc(row.metal)}"><td><a href="${esc(row.href)}">${esc(row.name)}</a>${row.bridged ? ' <span class="pill">bridged</span>' : ''}</td>${showLedger ? `<td>${esc(row.ledger)}</td>` : ''}<td>${esc(supplyLabel(row.supply, row.ledgerId, row.grams, row.unit))}</td><td>${esc(row.holders)}</td></tr>`).join('');
-  return `<table class="ledger-table"><thead>${head}</thead><tbody>${body || '<tr><td colspan="4">No tokens in this view.</td></tr>'}</tbody></table>`;
+function ledgerBoard(which: LedgerTab): string {
+  const gold = commodityMeta('XAU');
+  const showBadge = which === 'all';
+  const xrpl = which === 'solana' || which === 'stellar' ? '' : (snap?.tokens ?? []).map(t => renderHomeCard(
+    t,
+    { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title },
+    undefined,
+    showBadge ? 'XRPL' : undefined,
+  )).join('');
+  const chain = which === 'xrpl' ? '' : CHAIN_TOKENS.filter(token => which === 'all' || token.ledger === which).map(token => {
+    const row = chainReadings.find(item => item.id === token.id) ?? placeholderChainReading(token);
+    const view = presentFromChain(row);
+    return renderCardShell({
+      tokenHref: `/token/${token.id}`,
+      name: token.name,
+      pill: token.bridged ? 'bridged' : undefined,
+      ledgerBadge: showBadge ? (token.ledger === 'solana' ? 'Solana' : 'Stellar') : undefined,
+      project: token.project,
+      subHref: classHref(gold.slug),
+      subName: gold.title,
+      supplyPrimary: view.supplyPrimary,
+      supplyUnit: view.supplyUnit,
+      search: `${token.name} ${token.displayCode} gold ${token.ledger} ${token.project}`,
+      presentation: view.presentation,
+      facts: view.facts,
+      meterVoice: 'quote',
+    });
+  }).join('');
+  return `<div class="board">${xrpl + chain || '<p class="muted">No tokens in this reading yet.</p>'}</div>`;
 }
-function ledgerNewsBlock(ledger: 'xrpl' | 'solana' | 'stellar'): string {
-  const items = newsByLedger(ledger).slice(0, 3);
-  if (!items.length) return '';
-  return `<section class="news-latest" aria-label="Latest news"><h2>Latest news</h2><ul>${items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a> <span class="meta">${esc(item.date)}</span></li>`).join('')}</ul><p><a href="/news/ledger/${ledger}">News for this ledger</a></p></section>`;
-}
-const LEDGER_JS = `(function(){var view=document.getElementById('ledger-view');var raw=document.getElementById('ledger-data');if(!view||!raw)return;var rows=JSON.parse(raw.textContent);var home=view.getAttribute('data-ledger')==='xrpl'?view.innerHTML:'';var metals={gold:1,silver:1,platinum:1,palladium:1,diamonds:1};function text(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}function oz(r){if(r.supply==null)return 'not available';if(r.supply===0&&r.ledgerId==='stellar')return '0 issued on Stellar';if(!(r.grams>0))return Number(r.supply).toLocaleString('en-US',{maximumFractionDigits:2})+' '+(r.unit||'tokens');return (r.supply*r.grams/31.1034768).toLocaleString('en-US',{maximumFractionDigits:2});}function hit(r,q){if(metals[q])return r.metal===q;return (r.name+' '+r.code+' '+r.ledger+' '+r.metal).toLowerCase().indexOf(q)>=0;}function draw(list,showLedger){var h='<table class="ledger-table"><thead><tr><th>Token</th>'+(showLedger?'<th><button type="button" id="ledger-sort">Ledger</button></th>':'')+'<th>Supply (troy oz)</th><th>Holders</th></tr></thead><tbody>';list.forEach(function(r){h+='<tr><td><a href="'+text(r.href)+'">'+text(r.name)+'</a>'+(r.bridged?' <span class="pill">bridged</span>':'')+'</td>'+(showLedger?'<td>'+text(r.ledger)+'</td>':'')+'<td>'+text(oz(r))+'</td><td>'+text(r.holders)+'</td></tr>';});view.innerHTML=h+'</tbody></table>';var btn=document.getElementById('ledger-sort');if(btn)btn.addEventListener('click',function(){list.sort(function(a,b){return a.ledger<b.ledger?-1:1;});draw(list,true);});}function apply(id,q){var query=(q||'').trim().toLowerCase();var list=rows.filter(function(r){return !query||hit(r,query);});if(query)return draw(list,true);if(id==='xrpl'&&home){view.innerHTML=home;return;}draw(list.filter(function(r){return id==='all'||r.ledgerId===id;}),id==='all');}document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(tab){tab.addEventListener('click',function(e){if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();var id=tab.getAttribute('data-ledger');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');});tab.setAttribute('aria-current','page');apply(id,(document.getElementById('ledger-search')||{}).value);history.pushState({ledger:id},'',tab.getAttribute('href'));});});var box=document.getElementById('ledger-search');if(box)box.addEventListener('input',function(){var on=document.querySelector('.ledger-tabs[role="tablist"] .ledger-tab[aria-current="page"]');apply(on?on.getAttribute('data-ledger'):'all',box.value);});window.addEventListener('popstate',function(){var path=location.pathname;var id=path==='/'?'xrpl':(path.split('/')[2]||'xrpl');document.querySelectorAll('.ledger-tabs[role="tablist"] .ledger-tab').forEach(function(el){el.removeAttribute('aria-current');if(el.getAttribute('data-ledger')===id)el.setAttribute('aria-current','page');});apply(id,'');});})();`;
+const LEDGER_JS = `(function(){var box=document.getElementById('ledger-search');var view=document.getElementById('ledger-view');if(!box||!view)return;var cards=[].slice.call(view.querySelectorAll('.token-card'));box.addEventListener('input',function(){var q=box.value.trim().toLowerCase();cards.forEach(function(card){var hay=(card.getAttribute('data-name')||'').toLowerCase();card.hidden=q.length>0&&hay.indexOf(q)<0;});});})();`;
 function ledgerSwitch(active: LedgerTab, inner: string): string {
   const rows = switchRows();
   const shown = active === 'all' ? rows : rows.filter(row => row.ledgerId === active);
@@ -386,44 +431,117 @@ function ledgerSwitch(active: LedgerTab, inner: string): string {
   const metalLine = ['gold', 'silver', 'platinum', 'palladium'].filter(name => byMetal.has(name)).map(name => `${name.charAt(0).toUpperCase()}${name.slice(1)} ${fmtNum(byMetal.get(name)!)} oz`).join(' · ');
   const missing = shown.filter(row => row.holders === 'not available').length;
   const zeroNote = active === 'stellar' || active === 'all' ? ' A token with 0 issued on Stellar stays listed and is left out of this total.' : '';
-  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${counted.length} tokens in the total${metalLine ? `: ${metalLine}` : ''}.${missing ? ` ${missing} with holders not available.` : ''}${zeroNote} Not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script type="application/json" id="ledger-data">${JSON.stringify(rows).replace(/</g, '\\u003c')}</script><script>${LEDGER_JS}</script>`;
+  const countWord = counted.length === 1 ? 'token' : 'tokens';
+  return `${ledgerTabs(active)}<label class="ledger-search">Search tokens <input id="ledger-search" type="search" autocomplete="off"></label><p class="muted" id="ledger-totals">${counted.length} ${countWord} in the total${metalLine ? `: ${metalLine}` : ''}.${missing ? ` ${missing} with holders not available.` : ''}${zeroNote} Not a vault check.</p><div id="ledger-view" data-ledger="${active}">${inner}</div><script>${LEDGER_JS}</script>`;
 }
-function listPage() {
-  const cards = (snap?.tokens ?? []).map(t => renderHomeCard(t, { href: `/commodities/${commodityMeta(t.metal).slug}`, name: commodityMeta(t.metal).title })).join('');
-  return page({
-    title: 'On-chain reserve health · ReserveWatch',
-    description: DEFAULT_DESCRIPTION, path: '/', refresh: true,
-    jsonLd: [orgLd(CONTACT_EMAIL), websiteLd(), datasetLd(snap?.updatedAt)],
-    body: `<div class="mast"><h1>${esc(TAGLINE)}</h1>
-<p class="lede">Public readings for tokenized assets. XRPL is the default view. Solana and Stellar are the other tabs. Not a buy or sell list.</p>
-${ledgerSwitch('xrpl', `<div class="board">${cards || '<p class="muted">No tokens in this reading yet.</p>'}</div>`)}
-${homeAnswer()}
-${header()}
-<ul class="legend-row">
+function legendRow(): string {
+  return `<ul class="legend-row">
 <li><i class="swatch tone-measured" aria-hidden="true"></i> Measured <span>a reading, not a safety rating</span></li>
 <li><i class="swatch tone-feature" aria-hidden="true"></i> Feature <span>an issuer power</span></li>
 <li><i class="swatch tone-gap" aria-hidden="true"></i> Gap <span>not confirmed, or not measurable</span></li>
 <li><i class="swatch tone-critical" aria-hidden="true"></i> Critical <span>an active problem, always on the card</span></li>
-</ul>
-<details class="fold"><summary>What the labels mean</summary><div class="fold-body">
+</ul>`;
+}
+function labelsFold(which: LedgerTab): string {
+  const extra = which === 'xrpl' ? '' : `<p>On Solana and Stellar, xrp-ledger.toml, AMM pools, order books, and the legacy overall are not available on this ledger. That is the ledger boundary. It is not a failed check.</p>`;
+  return `<details class="fold"><summary>What the labels mean</summary><div class="fold-body">
 <p><b>Measured</b> means the reading could be taken: pool depth at or above about $${n0(LOW_LIQ_USD)}, a reliable price within ${PEG_WARN_PCT}% of spot, or an issuer listed in its own xrp-ledger.toml. It is not proof of backing.</p>
 <p><b>Feature</b> means clawback, restricted access, a concentrated holder, or the ability to freeze a line. It says what holders are exposed to. It is not an adverse event, and it is not risk-free.</p>
 <p><b>Gap</b> means the data is missing. No pool is not a broken peg. An unconfirmed issuer link is not a fraud finding.</p>
 <p><b>Caution and Critical</b> are only for an active problem or conflicting records: Global Freeze, a discontinued token, a reliable peg at least ${PEG_WARN_PCT}% from spot, supply that is actually frozen, or issuer records that disagree with the account. Those lines stay on the card. They are not accusations.</p>
 <p>Legacy OK / WARN / CRITICAL is the older worst raw check. A feature or a gap still makes it WARN. It remains the API <code>status</code> field. <a href="/methodology">Full rules</a> · <a href="/disclaimer">disclaimer</a>.</p>
 <p>RLUSD and USDV are valued at a nominal $1. That is the issuer-stated peg, not a reserve check. USDV is not graded as a commodity.</p>
-</div></details></div>
-${classStrip()}
-${marketActivityHtml()}
+${extra}</div></details>`;
+}
+function activitySection(which: LedgerTab): string {
+  if (which === 'xrpl') return marketActivityHtml();
+  if (which === 'all') return marketActivityHtml('The figure below is the XRP Ledger. Solana and Stellar 7-day volume is not available on this ledger.');
+  const name = which === 'solana' ? 'Solana' : 'Stellar';
+  return `<section class="activity" aria-label="Market activity"><h2>Market activity</h2><p class="volume">Not available on this ledger. 7-day DEX volume is an XRP Ledger reading. ReserveWatch does not publish a ${name} volume.</p></section>`;
+}
+function ledgerNewsSection(which: Exclude<LedgerTab, 'xrpl'>): string {
+  const items = which === 'all'
+    ? newsDays(loadNews()).flatMap(day => day.items).filter(item => item.ledgers.some(name => name === 'xrpl' || name === 'solana' || name === 'stellar')).slice(0, 3)
+    : newsByLedger(which).slice(0, 3);
+  const more = which === 'all' ? '/news' : `/news/ledger/${which}`;
+  const moreLabel = which === 'all' ? 'All news' : 'News for this ledger';
+  const rows = items.length
+    ? items.map(item => `<li><a href="${esc(newsItemPath(item))}">${esc(item.headline)}</a><span class="meta">${esc(item.date)} · ${esc(item.source.name)}</span></li>`).join('')
+    : '<li>No items for this ledger yet.</li>';
+  return `<section class="news-latest" aria-label="Latest news"><h2>Latest news</h2><ul>${rows}</ul><p><a href="${more}">${moreLabel}</a></p></section>`;
+}
+function todayLine(which: LedgerTab): string {
+  if (which === 'xrpl') return `<p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>`;
+  const href = which === 'all' ? '/api/tokens?ledger=all' : `/api/tokens?ledger=${which}`;
+  const today = which === 'all' ? `XRPL ${trackedClassList()}; Solana and Stellar gold` : 'gold';
+  return `<p class="muted">Today: ${esc(today)}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="${href}">${esc(href)}</a> (<code>presentation</code> is model ${PRESENTATION_MODEL}).</p>`;
+}
+function shortHost(src: string): string {
+  try { return new URL(src).host || src; } catch { return src; }
+}
+function goldSpotFallback(): { usd: number | null; source: string } {
+  const gold = snap?.tokens.find(token => token.metal === 'XAU' && token.spot?.usdPerOz != null && token.spot.unsupported !== true);
+  return { usd: gold?.spot.usdPerOz ?? null, source: gold?.spot.source ?? '' };
+}
+function chainClock(which: Exclude<LedgerTab, 'xrpl'>): { when: string; spotUsd: number | null; source: string } {
+  const rows = chainReadings.filter(row => which === 'all' || row.ledger === which);
+  const when = rows.map(row => row.updatedAt).filter(Boolean).sort().at(-1) ?? '';
+  const spot = rows.find(row => row.spotUsd != null);
+  const source = rows.find(row => row.spotSource)?.spotSource ?? '';
+  if (spot?.spotUsd != null) return { when, spotUsd: spot.spotUsd, source: source || goldSpotFallback().source };
+  const fallback = goldSpotFallback();
+  return { when, spotUsd: fallback.usd, source: fallback.source };
+}
+function chainAsOf(which: Exclude<LedgerTab, 'xrpl'>): string {
+  const clock = chainClock(which);
+  const spotBit = clock.spotUsd != null
+    ? `Gold spot ${usd(clock.spotUsd, 2)}/troy oz${clock.source ? ` · <span title="${esc(clock.source)}">${esc(shortHost(clock.source))}</span>` : ''}`
+    : 'Gold spot not read this run';
+  if (which === 'all') {
+    const xrpl = snap?.updatedAt ? `XRPL updated <b>${esc(snap.updatedAt)}</b>` : 'XRPL reading not loaded';
+    const chain = clock.when ? `Solana and Stellar updated <b>${esc(clock.when)}</b>` : 'Solana and Stellar reading not loaded';
+    return `<p class="asof">${xrpl} · ${chain} · ${spotBit}</p>`;
+  }
+  const when = clock.when ? `Updated <b>${esc(clock.when)}</b>` : 'No ledger reading loaded yet';
+  return `<p class="asof">${when} · ${spotBit}</p>`;
+}
+function ledgerAnswer(which: Exclude<LedgerTab, 'xrpl'>): string {
+  const rows = switchRows().filter(row => which === 'all' || row.ledgerId === which);
+  const clock = chainClock(which);
+  const day = (which === 'all' ? (snap?.updatedAt || clock.when) : clock.when).slice(0, 10);
+  const when = /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : 'the latest reading';
+  if (which === 'all') {
+    return `As of ${when}, ReserveWatch listed ${rows.length} commodity tokens on XRPL, Solana, and Stellar. The 7-day volume section is the XRP Ledger reading. Solana and Stellar volume is not available on this ledger. The legacy OK, WARN, and CRITICAL overall is on XRPL cards only. It is not a buy or sell rating and not proof of reserves.`;
+  }
+  const name = which === 'solana' ? 'Solana' : 'Stellar';
+  return `As of ${when}, ReserveWatch listed ${rows.length} commodity tokens on ${name}. 7-day DEX volume is not available on this ledger. The legacy OK, WARN, and CRITICAL overall is not available on this ledger. This is not a buy or sell rating and not proof of reserves.`;
+}
+function listPage() {
+  return page({
+    title: 'On-chain reserve health · ReserveWatch',
+    description: DEFAULT_DESCRIPTION, path: '/', refresh: true,
+    jsonLd: [orgLd(CONTACT_EMAIL), websiteLd(), datasetLd(snap?.updatedAt)],
+    body: `<div class="mast"><h1>${esc(TAGLINE)}</h1>
+<p class="lede">Public readings for tokenized assets. XRPL is the default view. Solana and Stellar are the other tabs. Not a buy or sell list.</p>
+${ledgerSwitch('xrpl', ledgerBoard('xrpl'))}
+${homeAnswer()}
+${header()}
+${legendRow()}
+${labelsFold('xrpl')}</div>
+${classStrip('xrpl')}
+${activitySection('xrpl')}
 ${latestNewsHtml()}
-<p class="muted">Today: ${esc(trackedClassList())}. Other classes are explained under Commodities until a public issuer can be confirmed. JSON: <a href="/api/tokens">/api/tokens</a> (<code>status</code> and <code>checks</code> unchanged; <code>presentation</code> is model ${PRESENTATION_MODEL}).</p>` });
+${todayLine('xrpl')}` });
 }
 
 const METAL_NAME: Record<string, string> = Object.fromEntries(Object.entries(COMMODITY_META).map(([k, v]) => [k, v.name]));
 /** Commodity classes that have at least one tracked token, in COMMODITY_META order. */
 const trackedClasses = () => Object.keys(COMMODITY_META).filter(c => TOKENS.some(t => t.metal === c));
 const trackedClassList = () => { const n = trackedClasses().map(c => commodityMeta(c).name); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n.join(''); };
-function classStrip(): string {
+function classStrip(which: LedgerTab = 'xrpl'): string {
+  if (which === 'solana' || which === 'stellar') {
+    return `<nav class="commodities" aria-label="Commodities"><span>Gold</span></nav>`;
+  }
   const links = CLASS_PAGES.filter(p => classTokens(p).length).map(p => `<a href="${classHref(p.slug)}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join('') + '<a href="/commodities">All classes</a>';
   return `<nav class="commodities" aria-label="Commodities">${links}</nav>`;
 }
@@ -632,6 +750,7 @@ ${renderDetailLead(t)}
 ${t.errors.length ? `<h3>Fetch errors</h3><ul>${t.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
 <details class="fold"><summary>Embed this reading</summary><div class="fold-body"><p>The image links back to this page. It is a measured line, not a rating.</p><img src="/badge/${esc(t.id)}.svg" alt="${esc(t.name)} on ReserveWatch" width="320" height="64"><pre><code>${esc(badgeEmbed({ pageUrl: SITE_URL + '/token/' + t.id, imageUrl: SITE_URL + '/badge/' + t.id + '.svg', name: t.name, symbol: t.displayCode }))}</code></pre></div></details>
 <p class="muted">JSON: <a href="/api/tokens/${esc(t.id)}">/api/tokens/${esc(t.id)}</a> · More ${esc(METAL_NAME[t.metal] ?? t.metal)} tokens: <a href="${classHref(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)} on XRPL</a> · <a href="/methodology">How checks work</a></p>
+${historySection(t.id, DATA_DIR)}
 ${citeLine('/token/' + t.id, t.updatedAt)}` });
 }
 
@@ -784,9 +903,9 @@ const METHODOLOGY = () => `
 
 <h2>Solana and Stellar</h2>
 <p>The home page defaults to the XRP Ledger. Solana and Stellar are separate readings. A failed read on one ledger does not change the others.</p>
-<p><b>Solana.</b> Supply and mint or freeze authority come from a public Solana RPC (<code>getTokenSupply</code> and <code>getAccountInfo</code>). Holder counts need an indexer. When <code>SOLANA_INDEXER_URL</code> is unset, holders are <b>not available</b>. That gap is not a penalty. A mint or freeze authority is an issuer control, the same kind of fact as an XRPL flag. It is not an event.</p>
-<p><b>Stellar.</b> A classic asset is read from Horizon: supply, trustlines, and the issuer flags AUTH_REQUIRED, AUTHORIZATION_REVOCABLE, and CLAWBACK. A SEP-41 contract supply is a Soroban <code>total_supply</code> call. Contract controls such as a blocklist are <b>n/a</b> here. Trustlines are accounts, not proof of metal.</p>
-<p><b>Price vs spot</b> on these ledgers is <b>not available</b>. ReserveWatch still shows the public spot gold price as context. It does not treat that price as the token's trading price. Bridged tokens are labeled bridged. None of these readings is a vault check, an audit, or a reason to buy or sell.</p>`;
+<p><b>Solana.</b> Supply and mint or freeze authority come from a public Solana RPC (<code>getTokenSupply</code> and <code>getAccountInfo</code>). Holder count is not available on this ledger yet when the public endpoint does not return it. That gap is not a penalty. A mint or freeze authority is an issuer control, the same kind of fact as an XRPL flag. It is not an event.</p>
+<p><b>Stellar.</b> A classic asset is read from Horizon: supply, trustlines, and the issuer flags AUTH_REQUIRED, AUTHORIZATION_REVOCABLE, and CLAWBACK. A SEP-41 contract supply is a Soroban <code>total_supply</code> call. Published contract controls, such as a blocklist, forced transfer, and named roles, are shown as issuer features. They are not an event. Trustlines are accounts, not proof of metal.</p>
+<p><b>Price vs spot</b> uses a public quote when the endpoint returns one. A thin quote is shown and is not graded. 7-day DEX volume and AMM pool tables are not available on these ledgers. Bridged tokens are labeled bridged. None of these readings is a vault check, an audit, or a reason to buy or sell.</p>`;
 
 const ABOUT = () => `
 <p><b>${SITE_NAME}. ${TAGLINE}.</b> It reads public XRPL, Solana and Stellar data for tokenized commodities — on the XRP Ledger today ${trackedClassList()} — and compares issuer controls, liquidity, and public verification. The legacy OK / WARN / CRITICAL overall is still published, separately, as the worst raw check.</p>
@@ -1409,49 +1528,108 @@ const commodityJson = (c: ClassPage) => ({
 function publicToken(t: TokenReport) {
   return { ...t, ledger: t.ledger ?? 'xrpl', presentation: viewOf(t) };
 }
-function ledgerPage(which: LedgerTab) {
+function publicChain(row: ChainReading) {
+  return { ...row, presentation: presentFromChain(row).presentation };
+}
+function ledgerPage(which: Exclude<LedgerTab, 'xrpl'>) {
   const copy = LEDGER_COPY[which];
-  const rows = switchRows().filter(row => which === 'all' || row.ledgerId === which);
   const path = `/ledger/${which}`;
-  const news = which === 'all' ? '' : ledgerNewsBlock(which);
   return page({
     title: copy.title, description: copy.description, path,
     jsonLd: [
-      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: copy.title.replace(/ · ReserveWatch$/, ''), path }]),
-      { '@context': 'https://schema.org', '@type': 'Dataset', name: copy.title.replace(/ · ReserveWatch$/, ''), description: copy.description, url: SITE_URL + path, license: SITE_URL + '/license', creator: orgRef(), publisher: orgRef(), isAccessibleForFree: true, inLanguage: 'en' },
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: copy.h1, path }]),
+      { '@context': 'https://schema.org', '@type': 'Dataset', name: copy.h1, description: copy.description, url: SITE_URL + path, license: SITE_URL + '/license', creator: orgRef(), publisher: orgRef(), isAccessibleForFree: true, inLanguage: 'en' },
     ],
-    body: `<div class="legal legal-wide"><h1>${esc(copy.title.replace(/ · ReserveWatch$/, ''))}</h1>
-<p class="answer">Public ledger readings. A number here is not a vault check and not investment advice. Where a check does not apply, it is marked not available.</p>
-${ledgerSwitch(which, ledgerTable(rows, which === 'all'))}
-${news}
-<p class="muted"><a href="/methodology">How each ledger is read</a></p></div>`,
+    body: `<div class="mast"><h1>${esc(copy.h1)}</h1>
+<p class="lede">${esc(copy.lede)}</p>
+${ledgerSwitch(which, ledgerBoard(which))}
+<p class="answer">${esc(ledgerAnswer(which))}</p>
+${citeLine(path, chainClock(which).when || snap?.updatedAt)}
+${chainAsOf(which)}
+${legendRow()}
+${labelsFold(which)}</div>
+${classStrip(which)}
+${activitySection(which)}
+${ledgerNewsSection(which)}
+${todayLine(which)}`,
   });
 }
+function chainSupplyProse(token: NonNullable<ReturnType<typeof chainTokenById>>, row: ChainReading): string {
+  if (row.supply == null) return 'supply was not read this run';
+  if (row.supply === 0 && token.ledger === 'stellar') return '0 issued on Stellar';
+  return `${fmtNum(row.supply)} ${token.displayCode}, about ${fmtNum(troyOz(row.supply, token.gramsPerToken))} troy oz`;
+}
 function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, live?: ChainReading) {
-  const checks = (live?.checks ?? []).map(c => `<li><b>${esc(c.result)}</b> ${esc(c.message)}</li>`).join('');
+  const row = live ?? placeholderChainReading(token);
+  const view = presentFromChain(row);
   const chainName = token.ledger === 'solana' ? 'Solana' : 'Stellar';
-  const supplyLine = live?.supply == null
-    ? 'not available'
-    : live.supply === 0 && token.ledger === 'stellar'
-      ? '0 issued on Stellar'
-      : `${fmtNum(live.supply)} ${token.displayCode} = ${fmtNum(live.supply * token.gramsPerToken)} g ≈ ${fmtNum(troyOz(live.supply, token.gramsPerToken))} oz`;
+  const gold = commodityMeta('XAU');
+  const day = row.updatedAt ? row.updatedAt.slice(0, 10) : '';
+  const holders = row.holders == null ? 'Holder count is not available' : `${row.holders.toLocaleString('en-US')} holder accounts were reported`;
+  const answer = `${day ? `As of ${day}, ` : ''}${token.name} on ${chainName} shows ${chainSupplyProse(token, row)}. ${holders}. ${row.pegNote} 7-day DEX volume, AMM pools, and the legacy overall are not available on this ledger. This is not a buy or sell rating. ReserveWatch has not checked any vault.`;
+  const na = 'Not available on this ledger';
+  const kv = (label: string, value: string) => `<div class="kv"><b>${label}</b>${value}</div>`;
+  const addressName = token.kind === 'mint' ? 'Mint' : token.kind === 'sep41' ? 'Contract' : 'Asset code';
+  const fallback = row.spotUsd == null ? goldSpotFallback() : null;
+  const spotUsd = row.spotUsd ?? fallback?.usd ?? null;
+  const spotSource = row.spotSource || fallback?.source || '';
+  const spot = spotUsd != null
+    ? `${usd(spotUsd)}/troy oz${spotSource ? `<div class="muted">${esc(shortHost(spotSource))}</div>` : ''}`
+    : 'Gold spot not read this run';
+  const quoted = row.priceUsd != null
+    ? `${usd(row.priceUsd, 4)}/token${row.pricePerOz != null ? ` · ${usd(row.pricePerOz)}/troy oz` : ''}<div class="muted">Public quote. A thin market is shown and not graded.</div>`
+    : 'No quoted price this run';
+  const holderStat = row.holders == null
+    ? `${esc(row.holdersNote || 'not available')}`
+    : `${fmt(row.holders, 0)}${token.kind === 'classic' ? '<div class="muted">Trustlines reported by Horizon. A trustline is not a holder of metal.</div>' : ''}`;
+  const fee = row.controls?.transferFeeBps;
+  const when = row.updatedAt ? `Updated <b>${esc(row.updatedAt)}</b> · ` : 'No ledger reading loaded yet · ';
+  const spotLine = spotUsd != null
+    ? `Gold spot ${usd(spotUsd, 2)}/troy oz${spotSource ? ` · <span title="${esc(spotSource)}">${esc(shortHost(spotSource))}</span>` : ''}`
+    : 'Gold spot not read this run';
+  const description = `${token.displayCode} commodity token on ${chainName}: supply and issuer controls. Not a vault check.`;
   return page({
-    title: `${token.displayCode} on ${chainName} · ReserveWatch`,
-    description: `${token.name} on ${chainName}. Supply and issuer controls from the public ledger. Not a vault check.`,
+    title: `${token.displayCode} commodity token on ${chainName} · ReserveWatch`,
+    description,
     path: `/token/${token.id}`,
-    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: chainName, path: `/ledger/${token.ledger}` }, { name: token.name, path: `/token/${token.id}` }])],
-    body: `<div class="legal"><p class="crumb"><a href="/ledger/${token.ledger}">${chainName}</a></p><h1>${esc(token.name)}</h1>
-<p class="answer">${esc(token.project)} on ${chainName}.${token.bridged ? ' Bridged.' : ''} ReserveWatch has not checked any vault.</p>
-<ul>
-<li>Address: <code>${esc(token.address)}</code>${token.issuer ? ` · issuer <code>${esc(token.issuer)}</code>` : ''}</li>
-<li>Supply: ${esc(supplyLine)}</li>
-<li>Holders: ${live?.holders == null ? 'not available' : esc(String(live.holders))}</li>
-<li>Price vs spot: ${esc(live?.pegNote ?? 'not available')}</li>
-</ul>
-${checks ? `<h2>Checks</h2><ul>${checks}</ul>` : '<p>No live reading yet. The token stays listed.</p>'}
-${token.notes.map(n => `<p>${esc(n)}</p>`).join('')}
-<p><a href="${esc(token.explorerUrl)}">Explorer</a> · <a href="${esc(token.sourceUrl)}">Address source</a> · <a href="${esc(token.website)}">Issuer site</a></p>
-<p class="muted"><a href="/disclaimer">Not investment advice and not an audit.</a></p></div>`,
+    jsonLd: [
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: chainName, path: `/ledger/${token.ledger}` }, { name: token.name, path: `/token/${token.id}` }]),
+      tokenThingLd({
+        id: token.id, name: token.name, description,
+        properties: [
+          { name: 'Supply', value: chainSupplyProse(token, row) },
+          { name: 'Holders', value: row.holders == null ? 'not available' : String(row.holders) },
+          { name: '7-day volume', value: na },
+        ],
+      }),
+    ],
+    body: `<p class="crumb"><a href="/ledger/${token.ledger}">${chainName}</a></p>
+<h1>${esc(token.name)}${token.bridged ? ' <span class="pill">bridged</span>' : ''}</h1>
+<p class="answer">${esc(answer)}</p>
+<p class="asof">${esc(chainSupplyProse(token, row))} · ${row.holders == null ? 'holders not available' : `${fmt(row.holders, 0)} holders`} · <span class="legacy-mark">Not available on this ledger</span> · <a href="/methodology">how labels differ</a></p>
+<p class="asof">${when}${spotLine}</p>
+${renderLeadShell({ presentation: view.presentation, facts: view.facts, meterVoice: 'quote' })}
+<div class="card stats grid">
+${kv(addressName, `<span class="scrollcode"><a href="${esc(token.explorerUrl)}" target="_blank" rel="noopener"><code>${esc(token.address)}</code></a></span>`)}
+${token.issuer ? kv('Issuer', `<span class="scrollcode"><a href="${esc(token.explorerUrl)}" target="_blank" rel="noopener"><code>${esc(token.issuer)}</code></a></span>`) : ''}
+${row.mintAuthority ? kv('Mint authority', `<span class="scrollcode"><code>${esc(row.mintAuthority)}</code></span><div class="muted">An issuer control, not an event.</div>`) : ''}
+${kv('Commodity class', `<a href="${classHref(gold.slug)}">${esc(gold.title)}</a>`)}
+${kv('Unit', `1 token = ${fmt(token.gramsPerToken, 4)} g gold`)}
+${kv('Domain (on-ledger)', `${na}<div class="muted">xrp-ledger.toml is not read on this ledger.</div>`)}
+${kv('Supply', esc(chainSupplyProse(token, row)))}
+${kv('Holders', holderStat)}
+${kv('Spot gold', spot)}
+${kv('Quoted price', quoted)}
+${kv('Peg', esc(row.pegNote))}
+${kv('Transfer fee', fee ? `${fee} bps` : 'No transfer fee in this reading')}
+${kv('7-day volume', na)}
+</div>
+<details class="fold"><summary>AMM pools, order book, and trust-line stats</summary><div class="fold-body"><p>Not available on this ledger. ReserveWatch does not publish an AMM table, an order book, a trust-line freeze count, or a legacy OK / WARN / CRITICAL overall for this token.</p></div></details>
+<details class="fold"><summary>Notes</summary><div class="fold-body"><ul>${token.notes.map(n => `<li>${esc(n)}</li>`).join('')}<li>Explorer: <a href="${esc(token.explorerUrl)}" target="_blank" rel="noopener">${esc(token.explorerUrl)}</a></li><li>Address source: <a href="${esc(token.sourceUrl)}" target="_blank" rel="noopener">${esc(token.sourceUrl)}</a></li><li>Issuer site: <a href="${esc(token.website)}" target="_blank" rel="noopener">${esc(token.website)}</a></li></ul></div></details>
+<details class="fold"><summary>Embed this reading</summary><div class="fold-body"><p>The image links back to this page. It is a measured line, not a rating.</p><img src="/badge/${esc(token.id)}.svg" alt="${esc(token.name)} on ReserveWatch" width="320" height="64"><pre><code>${esc(badgeEmbed({ pageUrl: SITE_URL + '/token/' + token.id, imageUrl: SITE_URL + '/badge/' + token.id + '.svg', name: token.name, symbol: token.displayCode }))}</code></pre></div></details>
+<p class="muted">JSON: <a href="/api/tokens/${esc(token.id)}">/api/tokens/${esc(token.id)}</a> · <a href="/ledger/${token.ledger}">${chainName} commodity tokens</a> · <a href="/methodology">How checks work</a> · <a href="/disclaimer">Not investment advice and not an audit.</a></p>
+${historySection(token.id, DATA_DIR)}
+${citeLine('/token/' + token.id, row.updatedAt || undefined)}`,
   });
 }
 function newsLedgerPage(ledger: NewsLedger, pageNo: number): string | null {
@@ -1528,13 +1706,31 @@ app.get('/token/:id', (q, r) => {
   }
   r.send(tokenPage(t));
 });
+app.get('/alerts/feed.xml', (q, r) => {
+  const ledger = typeof q.query.ledger === 'string' ? q.query.ledger : '';
+  const known = ledger === '' || ledger === 'xrpl' || ledger === 'solana' || ledger === 'stellar';
+  const events = known ? readEvents(DATA_DIR).filter(event => !ledger || event.ledger === ledger) : [];
+  r.set('Content-Type', 'application/rss+xml; charset=utf-8');
+  r.set('Cache-Control', 'public, max-age=300');
+  r.send(eventsRss(events, SITE_URL, known && ledger ? ledger : undefined));
+});
 app.get('/alerts', (_q, r) => {
-  const rows = readAlerts().map(a => `<tr><td class="muted">${esc(a.at)}</td><td><a href="/token/${esc(a.tokenId)}">${esc(a.tokenId)}</a></td><td>${a.from ? badge(a.from) : 'new'} → ${badge(a.to)}</td><td>${a.reasons.map(esc).join('<br>')}</td></tr>`).join('');
+  const when = (at: string) => {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? at : d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
+  };
+  const tokenLink = (id: string) => `<a href="/token/${esc(id)}">${esc(id).replace(/-/g, '-<wbr>')}</a>`;
+  const rows = readAlerts().map(a => `<tr><td class="muted">${esc(when(a.at))}</td><td>${tokenLink(a.tokenId)}</td><td>${a.from ? badge(a.from) : 'new'} → ${badge(a.to)}</td><td>${a.reasons.map(esc).join('<br>')}</td></tr>`).join('');
+  const changes = readEvents(DATA_DIR).slice().reverse().map(event => `<tr><td class="muted">${esc(when(event.at))}</td><td>${tokenLink(event.tokenId)}</td><td>${esc(event.ledger)}</td><td>${esc(event.text)}</td></tr>`).join('');
   r.send(page({
-    title: 'XRPL token alert log · ReserveWatch',
-    description: 'Log of legacy OK, WARN, and CRITICAL changes for tracked XRPL commodity tokens, with the raw-check reasons. Not advice.',
+    title: 'Token reading changes · ReserveWatch',
+    description: 'Supply, issuer-control, and peg-grade changes, plus the legacy XRPL status log. Not advice.',
     path: '/alerts', refresh: true,
-    body: `<h1>Health status alert log</h1><p class="muted">Alerts follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. The live comparison is on each token page. Labels are not reserves or solvency, and not buy or sell signals.</p><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table>` }));
+    body: `<h1>Reading changes</h1>
+<p class="muted">A note is written when supply moves at least ${esc(String(supplyThreshold()))}% from the previous day, when an issuer control changes, when a graded peg moves from ok to warn or critical, or when a token is first seen or its supply is zero. Issuer controls are labeled as controls, not as events. This is not investment advice and not a vault check. Email is not sent.</p>
+<p>RSS: <a href="/alerts/feed.xml">all ledgers</a> · <a href="/alerts/feed.xml?ledger=xrpl">XRPL</a> · <a href="/alerts/feed.xml?ledger=solana">Solana</a> · <a href="/alerts/feed.xml?ledger=stellar">Stellar</a></p>
+<div class="table-wrap"><table><tr><th>At</th><th>Token</th><th>Ledger</th><th>Note</th></tr>${changes || '<tr><td colspan="4" class="muted">No reading changes recorded yet.</td></tr>'}</table></div>
+<h2>Legacy XRPL status log</h2><p class="muted">These rows follow the <b>legacy overall</b> (the worst raw check: OK, WARN, CRITICAL). They do not fire because a comparison chip is a feature or a gap. A legacy move can be clawback, a missing pool, or an unconfirmed link — read the reasons. Labels are not reserves or solvency, and not buy or sell signals.</p><div class="table-wrap"><table><tr><th>At</th><th>Token</th><th>Legacy change</th><th>Reasons (raw checks)</th></tr>${rows || '<tr><td colspan="4" class="muted">No status changes recorded yet.</td></tr>'}</table></div>` }));
 });
 app.get('/methodology', (_q, r) => { r.send(infoPage('How readings are labeled · ReserveWatch', 'How readings are labeled', '/methodology', 'How measured facts, issuer controls, and missing data differ from active problems. Not a rating or proof of reserves.', `<p class="answer">ReserveWatch separates measured facts, issuer features, and missing data from active problems. The legacy OK, WARN, or CRITICAL overall is the worst raw check. It is not a buy or sell rating and not proof of reserves.</p>${METHODOLOGY()}${citeLine('/methodology', COMPARE_UPDATED_ISO)}`, COMPARE_UPDATED)); });
 app.get('/faq', (_q, r) => { r.send(faqPage()); });
@@ -1632,14 +1828,27 @@ ${citeLine('/state', summary.asOf)}</div>`,
 app.get('/state', (_q, r) => { r.send(statePage()); });
 app.get('/badge/:file', (q, r) => {
   const id = String(q.params.file).replace(/\.svg$/i, '');
+  const send = (name: string, symbol: string, line: string, status = 200) => {
+    r.status(status);
+    r.set('Content-Type', 'image/svg+xml; charset=utf-8');
+    r.set('Cache-Control', 'public, max-age=300');
+    r.set('X-Content-Type-Options', 'nosniff');
+    r.send(badgeSvg({ name, symbol, line }));
+  };
   const def = TOKENS.find(x => x.id === id);
-  if (!def) return void r.status(404).type('image/svg+xml').send(badgeSvg({ name: 'Unknown token', symbol: '—', line: 'Not on ReserveWatch' }));
-  const t = snap?.tokens.find(x => x.id === id);
-  const line = t?.activity ? activityPlain(t.activity) : 'Reading not loaded';
-  r.set('Content-Type', 'image/svg+xml; charset=utf-8');
-  r.set('Cache-Control', 'public, max-age=300');
-  r.set('X-Content-Type-Options', 'nosniff');
-  r.send(badgeSvg({ name: def.name, symbol: def.displayCode, line }));
+  if (def) {
+    const t = snap?.tokens.find(x => x.id === id);
+    return void send(def.name, def.displayCode, t?.activity ? activityPlain(t.activity) : 'Reading not loaded');
+  }
+  const chain = chainTokenById(id);
+  if (!chain) return void send('Unknown token', '—', 'Not on ReserveWatch', 404);
+  const live = chainReadings.find(row => row.id === chain.id);
+  const line = !live || live.supply == null
+    ? 'Supply not in this reading'
+    : live.supply === 0 && chain.ledger === 'stellar'
+      ? '0 issued on Stellar'
+      : `${fmtNum(troyOz(live.supply, chain.gramsPerToken))} troy oz listed`;
+  send(chain.name, chain.displayCode, line);
 });
 for (const slug of ['gold', 'silver', 'platinum', 'energy', 'diamonds']) {
   app.get('/' + slug, (_q, r) => {
@@ -1666,16 +1875,17 @@ app.get('/api/tokens', (q, r) => {
     return void r.status(400).json({ error: 'unknown ledger' });
   }
   if (which === 'solana' || which === 'stellar' || which === 'all') {
-    const extra = chainReadings.filter(row => which === 'all' || row.ledger === which).map(row => ({ ...row, ledger: row.ledger }));
+    const extra = chainReadings.filter(row => which === 'all' || row.ledger === which).map(row => publicChain(row));
     const xrpl = which === 'all' && snap ? publicSnap(snap).tokens : [];
     r.json({ ledger: which, updatedAt: extra[0]?.updatedAt ?? snap?.updatedAt ?? null, tokens: [...xrpl, ...extra] });
     return;
   }
   snap ? r.json(publicSnap(snap)) : r.status(503).json({ error: lastError ?? 'warming up' });
 });
+app.get('/api/history/:tokenId', (q, r) => { r.json(tokenHistory(String(q.params.tokenId), DATA_DIR)); });
 app.get('/api/tokens/:id', (q, r) => {
   const chain = chainReadings.find(row => row.id === q.params.id);
-  if (chain) return void r.json(chain);
+  if (chain) return void r.json(publicChain(chain));
   const t = snap?.tokens.find(x => x.id === q.params.id);
   t ? r.json(publicToken(t)) : r.status(404).json({ error: 'not found' });
 });

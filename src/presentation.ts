@@ -69,8 +69,11 @@ export interface CategoryView {
 
 export interface Presentation {
   model: typeof PRESENTATION_MODEL;
-  /** Echo of TokenReport.status. Not recomputed and not a recommendation. */
-  legacyOverall: Severity;
+  /**
+   * Echo of TokenReport.status on XRPL. Not recomputed and not a recommendation.
+   * Null on Solana and Stellar: those ledgers have no OK / WARN / CRITICAL aggregate.
+   */
+  legacyOverall: Severity | null;
   legacyNote: string;
   categories: Record<CategoryId, CategoryView>;
   /** Plain-text market numbers for the comparison row (TVL, peg, nominal-$1 caveat). */
@@ -520,4 +523,26 @@ export function presentFromReport(t: TokenReport, thresholds?: Thresholds): Pres
 
 export function itemsOf(p: Presentation): PresentItem[] {
   return [p.categories.market, p.categories.controls, p.categories.identity].flatMap(c => c.items);
+}
+
+/** Same category sort and summary tone as `classify`, for a ledger adapter that already built the items. */
+export function presentationFromParts(parts: {
+  legacyOverall: Severity | null;
+  legacyNote: string;
+  marketFigures: string;
+  market: PresentItem[];
+  controls: PresentItem[];
+  identity: PresentItem[];
+}): Presentation {
+  return {
+    model: PRESENTATION_MODEL,
+    legacyOverall: parts.legacyOverall,
+    legacyNote: parts.legacyNote,
+    marketFigures: parts.marketFigures,
+    categories: {
+      market: category('market', 'Market, liquidity and peg', parts.market),
+      controls: category('controls', 'Issuer controls', parts.controls),
+      identity: category('identity', 'Identity and verification', parts.identity),
+    },
+  };
 }

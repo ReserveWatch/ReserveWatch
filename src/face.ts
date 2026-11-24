@@ -5,6 +5,7 @@
 // must place outside any <details> element.
 
 import type { TokenReport } from './monitor.js';
+import { commodityMeta } from './config/tokens.js';
 import { activityPlain } from './volume.js';
 import {
   itemsOf, presentFromReport, DEFAULT_THRESHOLDS,
@@ -104,18 +105,23 @@ function chip(item: PresentItem, facts: FaceFacts): string {
   return `<span class="chip tone-${item.tone}" title="${esc(item.detail)}" aria-label="${esc(tone)}: ${esc(face)}">${esc(face)}</span>`;
 }
 
-function liquidityMeter(facts: FaceFacts): string {
-  if (!facts.hasPool) return '';
-  const width = pctWidth((facts.liquidityUsd / facts.lowLiqUsd) * 100);
-  const caption = `${usd0(facts.liquidityUsd)} pool. The bar fills at the ${usd0(facts.lowLiqUsd)} depth gate used before a peg is graded.`;
+function liquidityMeter(facts: FaceFacts, voice: 'pool' | 'quote'): string {
+  if (voice === 'pool' && !facts.hasPool) return '';
+  if (voice === 'quote' && !(facts.liquidityUsd > 0)) return '';
+  const width = pctWidth((facts.liquidityUsd / (facts.lowLiqUsd || 1)) * 100);
+  const caption = voice === 'pool'
+    ? `${usd0(facts.liquidityUsd)} pool. The bar fills at the ${usd0(facts.lowLiqUsd)} depth gate used before a peg is graded.`
+    : `${usd0(facts.liquidityUsd)} quoted liquidity. The bar fills at the ${usd0(facts.lowLiqUsd)} gate used before a price is graded. This is not an AMM pool.`;
   return `<div class="meter" role="img" aria-label="${esc(caption)}"><span style="width:${width}%"></span></div><p class="meter-cap">${esc(caption)}</p>`;
 }
 
-function pegMeter(facts: FaceFacts): string {
+function pegMeter(facts: FaceFacts, voice: 'pool' | 'quote'): string {
   if (!facts.pegReliable || facts.deviationPct == null) return '';
   const half = facts.pegCritPct || 10;
   const left = pctWidth(((facts.deviationPct + half) / (half * 2)) * 100);
-  const caption = `Reliable peg ${signed(facts.deviationPct)} versus spot. The scale is ±${half} percentage points. Inside 3 points is near spot. Not a safety rating.`;
+  const caption = voice === 'pool'
+    ? `Reliable peg ${signed(facts.deviationPct)} versus spot. The scale is ±${half} percentage points. Inside 3 points is near spot. Not a safety rating.`
+    : `Quoted price ${signed(facts.deviationPct)} versus spot, from a market deep enough to grade. The scale is ±${half} percentage points. Inside 3 points is near spot. A trading price only. Not a safety rating.`;
   return `<div class="peg" role="img" aria-label="${esc(caption)}"><div class="peg-track"><span class="peg-mark" style="left:${left}%"></span></div></div><p class="meter-cap">${esc(caption)}</p>`;
 }
 
@@ -143,36 +149,103 @@ function readings(items: PresentItem[], facts: FaceFacts, figures: string): stri
   return `<details class="fold"><summary>Readings</summary><div class="fold-body">${body}</div></details>`;
 }
 
-/** Homepage and commodity card. The alert banner is before any details element. */
-export function renderHomeCard(t: TokenReport, nav: CardNav, thresholds: Thresholds = DEFAULT_THRESHOLDS): string {
-  const view = presentFromReport(t, thresholds);
-  const facts = faceFacts(t, thresholds);
+function legacyMark(view: { legacyOverall: string | null; legacyNote: string }): string {
+  if (view.legacyOverall == null) {
+    return `<span class="legacy-mark" title="${esc(view.legacyNote)}">Legacy overall not available on this ledger</span>`;
+  }
+  return `<span class="legacy-mark legacy-${view.legacyOverall}" title="${esc(view.legacyNote)}">Legacy ${view.legacyOverall.toUpperCase()}</span>`;
+}
+
+export interface CardShell {
+  tokenHref: string;
+  name: string;
+  pill?: string;
+  /** Shown on the combined ledger board so each card names its ledger. */
+  ledgerBadge?: string;
+  project: string;
+  subHref: string;
+  subName: string;
+  supplyPrimary: string;
+  supplyUnit: string;
+  /** Lower-cased by the search box. Include name, code, metal, and ledger. */
+  search: string;
+  presentation: ReturnType<typeof presentFromReport>;
+  facts: FaceFacts;
+  volumeHtml?: string;
+  /** `pool` is the XRPL AMM caption. `quote` is a public price with no AMM table. */
+  meterVoice?: 'pool' | 'quote';
+}
+
+function meters(facts: FaceFacts, voice: 'pool' | 'quote'): string {
+  return liquidityMeter(facts, voice) + pegMeter(facts, voice);
+}
+
+/** Shared card body. The alert banner is before any details element. */
+export function renderCardShell(card: CardShell): string {
+  const view = card.presentation;
+  const facts = card.facts;
+  const voice = card.meterVoice ?? 'pool';
   const items = itemsOf(view);
   const edge = items.some(i => i.tone === 'critical') ? ' edge-critical' : items.some(i => i.tone === 'warn') ? ' edge-warn' : '';
-  const pill = t.label ? `<span class="pill">${esc(t.label)}</span>` : '';
+  const badge = card.ledgerBadge ? `<span class="pill ledger-badge">${esc(card.ledgerBadge)}</span>` : '';
+  const pill = card.pill ? `<span class="pill">${esc(card.pill)}</span>` : '';
   const controls = view.categories.controls.items;
   const identity = view.categories.identity.items;
-  return `<article class="token-card${edge}">
-<header class="card-top"><div><h2><a href="/token/${esc(t.id)}">${esc(t.name)}</a>${pill}</h2><p class="card-sub">${esc(t.project)} · <a href="${esc(nav.href)}">${esc(nav.name)}</a></p></div><p class="supply"><b>${esc(t.supply.circulating == null ? '—' : Math.round(t.supply.circulating).toLocaleString('en-US'))}</b><span>${esc(t.displayCode)}</span></p></header>
+  return `<article class="token-card${edge}" data-name="${esc(card.search)}">
+<header class="card-top"><div><h2><a href="${esc(card.tokenHref)}">${esc(card.name)}</a>${badge}${pill}</h2><p class="card-sub">${esc(card.project)} · <a href="${esc(card.subHref)}">${esc(card.subName)}</a></p></div><p class="supply"><b>${esc(card.supplyPrimary)}</b><span>${esc(card.supplyUnit)}</span></p></header>
 ${banner(items)}
 <div class="groups">
-<section class="group"><h3>Market</h3><p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${volumeHtml(t)}${liquidityMeter(facts)}${pegMeter(facts)}</section>
+<section class="group"><h3>Market</h3><p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${card.volumeHtml ?? ''}${meters(facts, voice)}</section>
 <section class="group"><h3>Controls</h3><div class="facts">${controls.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div>${concentrationMeter(controls, facts)}</section>
 <section class="group"><h3>Identity</h3><div class="facts">${identity.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div></section>
 </div>
-<footer class="card-foot"><span class="legacy-mark legacy-${view.legacyOverall}" title="${esc(view.legacyNote)}">Legacy ${view.legacyOverall.toUpperCase()}</span>${readings(items, facts, view.marketFigures)}</footer>
+<footer class="card-foot">${legacyMark(view)}${readings(items, facts, view.marketFigures)}</footer>
 </article>`;
 }
 
 /** Token page lead: banner, then the three groups. Explanations sit in details; the banner does not. */
-export function renderDetailLead(t: TokenReport, thresholds: Thresholds = DEFAULT_THRESHOLDS): string {
-  const view = presentFromReport(t, thresholds);
-  const facts = faceFacts(t, thresholds);
+export function renderLeadShell(card: Pick<CardShell, 'presentation' | 'facts' | 'volumeHtml' | 'meterVoice'>): string {
+  const view = card.presentation;
+  const facts = card.facts;
+  const voice = card.meterVoice ?? 'pool';
   const items = itemsOf(view);
   const block = (title: string, inner: string, groupItems: PresentItem[]) => `<section class="panel"><h2>${title}</h2>${inner}<details class="fold"><summary>Explanation</summary><div class="fold-body">${groupItems.map(i => `<p><b>${esc(visibleLabel(i, facts))}.</b> ${esc(i.detail)}</p>`).join('') || '<p>Nothing classified.</p>'}</div></details></section>`;
   return `${banner(items)}<div class="panels">
-${block('Market', `<p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${volumeHtml(t)}${liquidityMeter(facts)}${pegMeter(facts)}`, view.categories.market.items)}
+${block('Market', `<p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${card.volumeHtml ?? ''}${meters(facts, voice)}`, view.categories.market.items)}
 ${block('Controls', `<div class="facts">${view.categories.controls.items.map(i => chip(i, facts)).join('')}</div>${concentrationMeter(view.categories.controls.items, facts)}`, view.categories.controls.items)}
 ${block('Identity', `<div class="facts">${view.categories.identity.items.map(i => chip(i, facts)).join('')}</div>`, view.categories.identity.items)}
 </div><p class="meter-cap">${esc(view.marketFigures)}</p>`;
+}
+
+/** Homepage and commodity card. The alert banner is before any details element. */
+export function renderHomeCard(t: TokenReport, nav: CardNav, thresholds: Thresholds = DEFAULT_THRESHOLDS, ledgerBadge?: string): string {
+  const view = presentFromReport(t, thresholds);
+  const facts = faceFacts(t, thresholds);
+  const metal = commodityMeta(t.metal).name;
+  return renderCardShell({
+    tokenHref: `/token/${t.id}`,
+    name: t.name,
+    pill: t.label,
+    ledgerBadge,
+    project: t.project,
+    subHref: nav.href,
+    subName: nav.name,
+    supplyPrimary: t.supply.circulating == null ? '—' : Math.round(t.supply.circulating).toLocaleString('en-US'),
+    supplyUnit: t.displayCode,
+    search: `${t.name} ${t.displayCode} ${metal} ${t.project} xrpl`,
+    presentation: view,
+    facts,
+    volumeHtml: volumeHtml(t),
+    meterVoice: 'pool',
+  });
+}
+
+/** Token page lead: banner, then the three groups. Explanations sit in details; the banner does not. */
+export function renderDetailLead(t: TokenReport, thresholds: Thresholds = DEFAULT_THRESHOLDS): string {
+  return renderLeadShell({
+    presentation: presentFromReport(t, thresholds),
+    facts: faceFacts(t, thresholds),
+    volumeHtml: volumeHtml(t),
+    meterVoice: 'pool',
+  });
 }

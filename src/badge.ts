@@ -17,6 +17,7 @@ export function badgeSvg(input: { name: string; symbol: string; line: string }):
 }
 
 export function badgeEmbed(opts: { pageUrl: string; imageUrl: string; name: string; symbol: string }): string {
-  const alt = `${opts.name} (${opts.symbol}) on ReserveWatch`;
+  const alreadyNamed = opts.name.includes(`(${opts.symbol})`);
+  const alt = alreadyNamed ? `${opts.name} on ReserveWatch` : `${opts.name} (${opts.symbol}) on ReserveWatch`;
   return `<a href="${opts.pageUrl}"><img src="${opts.imageUrl}" alt="${alt}" width="320" height="64"></a>`;
 }

@@ -10,7 +10,7 @@
     "check": "tsx src/check.ts",
     "build": "tsc && mkdir -p dist/content && cp src/content/news-seed.json dist/content/news-seed.json",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/presentation.test.ts test/face.test.ts test/layout.test.ts test/volume.test.ts test/seo.test.ts test/api-robots.test.ts test/seo-limits.test.ts test/news.test.ts test/ledgers.test.ts",
+    "test": "tsx --test test/presentation.test.ts test/face.test.ts test/layout.test.ts test/volume.test.ts test/seo.test.ts test/api-robots.test.ts test/seo-limits.test.ts test/news.test.ts test/ledgers.test.ts test/chain-present.test.ts test/history.test.ts",
     "start:prod": "node --env-file-if-exists=.env dist/server.js"
   },
   "keywords": [],
