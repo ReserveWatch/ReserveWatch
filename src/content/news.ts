@@ -333,13 +333,16 @@ export function snapshotPath(week: NewsWeek): string | null {
   return SNAPSHOTS.some(s => s.week === week.snapshot) ? `/snapshots/${week.snapshot}` : null;
 }
 
-export function newsRss(doc: NewsFile, siteUrl: string): string {
-  const items = newsDays(doc).flatMap(day => day.items).slice(0, 50);
+export function newsRss(doc: NewsFile, siteUrl: string, ledger?: string): string {
+  const items = newsDays(doc).flatMap(day => day.items).filter(item => !ledger || item.ledgers.includes(ledger as NewsLedger)).slice(0, 50);
   const xml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]!));
   const rows = items.map(item => {
     const day = `${siteUrl}/news/${item.date}`;
     const description = `${item.summary} Why it matters: ${item.whyItMatters} Source: ${item.source.name} (${item.source.url})`;
     return `<item><title>${xml(item.headline)}</title><link>${xml(day)}</link><guid isPermaLink="true">${xml(day + '#' + newsAnchor(item))}</guid><pubDate>${xml(new Date(item.publishedAt).toUTCString())}</pubDate><description>${xml(description)}</description><source url="${xml(item.source.url)}">${xml(item.source.name)}</source></item>`;
   }).join('');
-  return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>ReserveWatch news</title><link>${xml(siteUrl)}/news</link><description>Short summaries of tokenized-commodity news, with the source named.</description>${rows}</channel></rss>`;
+  const title = ledger ? `ReserveWatch ${ledger} commodity news` : 'ReserveWatch news';
+  const link = ledger ? `${siteUrl}/news/ledger/${ledger}` : `${siteUrl}/news`;
+  const about = ledger ? ` about ${ledger}` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>${xml(title)}</title><link>${xml(link)}</link><description>Short summaries of tokenized-commodity news${about}, with the source named.</description>${rows}</channel></rss>`;
 }

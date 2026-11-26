@@ -38,6 +38,8 @@ export interface SeoMeta {
   canonical?: boolean;
   /** News pages link the RSS feed. */
   rss?: boolean;
+  /** Override the feed URL, for example a ledger filter. */
+  rssHref?: string;
   jsonLd?: object[];
 }
 
@@ -48,7 +50,7 @@ export function seoHead(m: SeoMeta): string {
   const ld = (m.jsonLd ?? []).map(o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`).join('');
   const robots = m.noindex ? 'noindex,follow' : 'index,follow,max-image-preview:large';
   const canonical = !m.noindex || m.canonical ? `<link rel="canonical" href="${escAttr(url)}">` : '';
-  const feed = m.rss ? '<link rel="alternate" type="application/rss+xml" title="ReserveWatch news" href="/news/feed.xml">' : '';
+  const feed = m.rss ? `<link rel="alternate" type="application/rss+xml" title="ReserveWatch news" href="${escAttr(m.rssHref ?? '/news/feed.xml')}">` : '';
   return `<title>${escAttr(m.title)}</title>
 <meta name="description" content="${escAttr(m.description)}">
 ${canonical}<meta name="robots" content="${robots}">
@@ -125,7 +127,7 @@ export const datasetLd = (updatedAt?: string) => ({
   description: 'Automated readings of public XRPL, Solana, and Stellar data for tokenized commodities (gold, silver, platinum, energy, diamonds and other classes as issuers appear). On the XRP Ledger the reading includes circulating supply, treasury exclusions, issuer account flags (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price versus spot metal price where a spot reference exists, holder concentration and xrp-ledger.toml domain verification. Solana and Stellar readings cover supply and issuer controls when the public endpoint returns them. The presentation field compares market, issuer controls, and identity without rewriting checks. status and checks remain the legacy worst-check aggregate (OK / WARN / CRITICAL). They are not audits, proof of reserves, credit ratings, or investment advice. RLUSD and USDV are valued at a nominal $1.',
   url: SITE_URL + '/', isAccessibleForFree: true, inLanguage: 'en',
   license: abs(DATA_LICENSE_PATH),
-  keywords: ['XRP Ledger', 'XRPL', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
+  keywords: ['XRP Ledger', 'XRPL', 'Solana', 'Stellar', 'tokenized gold', 'tokenized silver', 'tokenized platinum', 'tokenized energy', 'tokenized diamonds', 'tokenized commodities', 'commodity tokens', 'on-ledger data', 'AMM liquidity', 'issuer flags'],
   creator: orgRef(), publisher: orgRef(),
   ...(updatedAt ? { dateModified: updatedAt } : {}),
   measurementTechnique: 'Automated queries of public XRPL mainnet servers (account_info, gateway_balances, account_lines, amm_info, book_offers) plus a public spot metal price API for gold, silver, platinum and palladium',
@@ -196,6 +198,13 @@ ${liveFacts ? liveFacts + '\n\n' : ''}Cite a reading as: ReserveWatch, YYYY-MM-D
 
 - [Home](${abs('/')}): live comparison of issuer controls, liquidity, and public verification on the XRP Ledger.
 - Ledgers: XRPL is the default (${abs('/')}). Solana: ${abs('/ledger/solana')}. Stellar: ${abs('/ledger/stellar')}. All three: ${abs('/ledger/all')}. A Solana or Stellar reading is not a vault check.
+- Solana JSON: ${abs('/api/tokens?ledger=solana')}. Stellar JSON: ${abs('/api/tokens?ledger=stellar')}. All three: ${abs('/api/tokens?ledger=all')}. Per-token JSON uses the page id, for example ${abs('/api/tokens/solana-paxg')}. Those API responses ask search engines not to index them. They are free to cite.
+- Solana gold commodity tokens: ${CHAIN_TOKENS.filter(t => t.ledger === 'solana').map(t => `${t.name} (${abs('/token/' + t.id)})`).join('; ')}.
+- Stellar gold commodity tokens: ${CHAIN_TOKENS.filter(t => t.ledger === 'stellar').map(t => `${t.name} (${abs('/token/' + t.id)})`).join('; ')}.
+- No silver or other non-gold commodity token is tracked on Solana or Stellar. ${abs('/silver')} says so. ${abs('/gold')} links the gold tokens on all three ledgers.
+- Badges: ${abs('/badge/{id}.svg')} for every tracked id, including Solana and Stellar. The image is a supply line, not a rating and not a vault check.
+- Alerts RSS: ${abs('/alerts/feed.xml')} plus ${abs('/alerts/feed.xml?ledger=xrpl')}, ${abs('/alerts/feed.xml?ledger=solana')}, and ${abs('/alerts/feed.xml?ledger=stellar')}.
+- News by ledger: ${abs('/news/ledger/solana')}, ${abs('/news/ledger/stellar')}, ${abs('/news/ledger/xrpl')}. News RSS: ${abs('/news/feed.xml')} and ${abs('/news/feed.xml?ledger=solana')} (same pattern for stellar and xrpl). Those filter pages are noindex and are not listed in the sitemap.
 - [Methodology](${abs('/methodology')}): how comparison labels differ from the legacy OK / WARN / CRITICAL overall, including peg vs spot.
 - [Learn](${abs('/learn')}): plain-language explainers.
 ${learn.map(l => `- [${l.title}](${l.href}): ${l.note}`).join('\n')}
@@ -228,7 +237,7 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
     { loc: abs('/'), lastmod: liveDate, changefreq: 'hourly', priority: '1.0' },
     ...(['solana', 'stellar', 'all'] as const).map(id => ({ loc: abs(`/ledger/${id}`), lastmod: liveDate, changefreq: 'hourly', priority: id === 'all' ? '0.6' : '0.8' })),
     ...TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
-    ...CHAIN_TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.6' })),
+    ...CHAIN_TOKENS.map(t => ({ loc: abs(`/token/${t.id}`), lastmod: liveDate, changefreq: 'hourly', priority: '0.8' })),
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },
     { loc: abs('/state'), lastmod: liveDate, changefreq: 'daily', priority: '0.9' },
     ...CLASS_PAGES.map(c => ({ loc: abs(classPublicPath(c.slug)), lastmod: TOKENS.some(t => c.codes.includes(t.metal)) ? liveDate : legalDate, changefreq: 'weekly', priority: TOKENS.some(t => c.codes.includes(t.metal)) ? '0.8' : '0.5' })),
@@ -248,13 +257,13 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },
     { loc: abs('/learn/clawback-freeze-trust-lines'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
     ...LEARN_GUIDES.map(g => ({ loc: abs(`/learn/${g.slug}`), lastmod: g.dateModified, changefreq: 'monthly', priority: '0.6' })),
-    { loc: abs('/faq'), lastmod: '2026-11-18', changefreq: 'monthly', priority: '0.6' },
+    { loc: abs('/faq'), lastmod: '2026-11-24', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/privacy'), lastmod: legalDate, changefreq: 'monthly', priority: '0.4' },
     { loc: abs('/disclaimer'), lastmod: '2026-11-06', changefreq: 'yearly', priority: '0.3' },
     { loc: abs(DATA_LICENSE_PATH), lastmod: '2026-11-20', changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/terms'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
     { loc: abs('/contact'), lastmod: legalDate, changefreq: 'yearly', priority: '0.3' },
-    { loc: abs('/llms.txt'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.3' },
+    { loc: abs('/llms.txt'), lastmod: '2026-11-24', changefreq: 'monthly', priority: '0.3' },
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

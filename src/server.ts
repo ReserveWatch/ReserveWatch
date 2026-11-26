@@ -18,7 +18,7 @@ import { activityPlain, industryTotal, isoWeek, loadActivities, pctLabel, rememb
 import { stateAnswer, summarizeState, type StateToken } from './state.js';
 import { badgeEmbed, badgeSvg } from './badge.js';
 import { clipAtWord, dayNeighbors, describeHeadlines, latestNews, loadNews, newsAnchor, newsByLedger, newsByTag, newsDayTitle, newsDays, newsItemPath, newsLongDay, newsMonDay, newsMonths, newsRss, newsTagTitle, newsWeek, newsWeekTitle, NEWS_ARCHIVE_TITLE, NEWS_INDEX_TITLE, NEWS_LEDGERS, NEWS_TAGS, snapshotPath, weekItems, type NewsFile, type NewsItem, type NewsLedger, type NewsTag } from './content/news.js';
-import { CHAIN_TOKENS, chainTokenById } from './ledgers/registry.js';
+import { CHAIN_TOKENS, chainTokenById, chainTokensByClass } from './ledgers/registry.js';
 import { readChainLedgers, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, type ChainReading } from './ledgers/read.js';
 import { placeholderChainReading, presentFromChain } from './ledgers/present.js';
 import { fmtNum, troyOz } from './ledgers/parse.js';
@@ -540,7 +540,7 @@ const trackedClasses = () => Object.keys(COMMODITY_META).filter(c => TOKENS.some
 const trackedClassList = () => { const n = trackedClasses().map(c => commodityMeta(c).name); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n.join(''); };
 function classStrip(which: LedgerTab = 'xrpl'): string {
   if (which === 'solana' || which === 'stellar') {
-    return `<nav class="commodities" aria-label="Commodities"><span>Gold</span></nav>`;
+    return `<nav class="commodities" aria-label="Commodities"><a href="/gold">Gold</a></nav>`;
   }
   const links = CLASS_PAGES.filter(p => classTokens(p).length).map(p => `<a href="${classHref(p.slug)}">${esc(p.h1.replace(/^Tokenized /, '').replace(/ on the XRP Ledger$/, ''))}</a>`).join('') + '<a href="/commodities">All classes</a>';
   return `<nav class="commodities" aria-label="Commodities">${links}</nav>`;
@@ -914,8 +914,10 @@ const ABOUT = () => `
 <h2>What it watches</h2>
 <p>Right now ${SITE_NAME} tracks tokenized commodities on XRPL, Solana and Stellar. The XRP Ledger list has ${TOKENS.length} tokens:</p>
 <ul>${TOKENS.map(t => `<li><a href="/token/${esc(t.id)}">${esc(t.name)}</a> <span class="muted">— ${esc(METAL_NAME[t.metal] ?? t.metal)}${t.label ? ` · ${esc(t.label)}` : ''}</span></li>`).join('')}</ul>
-<p>Every other commodity class — palladium, oil, natural gas, uranium, copper, timber, wheat, soybeans, corn, cotton and more — has a plain-language <a href="/commodities">commodity page</a> that says honestly whether any public XRPL issuer exists yet. We add a token only when we can confirm its issuer account on XRPL mainnet.</p>
-<p>For each one it shows circulating supply, issuer control settings (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price compared with spot price (metals only), holder concentration, and whether the issuer's website confirms the issuer. How each check works is explained on the <a href="/methodology">methodology</a> page.</p>
+<p>Solana and Stellar gold commodity tokens have their own pages, linked from <a href="/gold">gold</a>. No silver commodity token is tracked on those ledgers. A Solana or Stellar reading is not a vault check.</p>
+<ul>${CHAIN_TOKENS.map(t => `<li><a href="/token/${esc(t.id)}">${esc(t.name)}</a> <span class="muted">— ${t.ledger === 'solana' ? 'Solana' : 'Stellar'}${t.bridged ? ' · bridged' : ''}</span></li>`).join('')}</ul>
+<p>Every other commodity class — palladium, oil, natural gas, uranium, copper, timber, wheat, soybeans, corn, cotton and more — has a plain-language <a href="/commodities">commodity page</a> that says honestly whether any public XRPL issuer exists yet. An XRPL token is added only when its issuer account can be confirmed on XRPL mainnet. A Solana or Stellar token is added only when the issuer or a public token list names that mint, contract, or classic asset.</p>
+<p>On the XRP Ledger, each token page shows circulating supply, issuer control settings (freeze, clawback, authorization), AMM pool liquidity, DEX order books, on-ledger price compared with spot price (metals only), holder concentration, and whether the issuer's website confirms the issuer. Solana and Stellar pages show supply and the issuer controls that ledger returns. Fields that ledger does not return stay "Not available on this ledger". How each check works is explained on the <a href="/methodology">methodology</a> page.</p>
 
 <h2>What it does not do</h2>
 <ul>
@@ -1306,7 +1308,11 @@ function commoditiesIndex() {
   const groups = GROUPS.map(g => {
     const items = g.slugs.map(sl => CLASS_PAGES.find(c => c.slug === sl)!).filter(Boolean).map(c => {
       const n = classTokens(c).length;
-      return `<li><a href="${classHref(c.slug)}"><b>${esc(cap(classLabel(c)))}</b></a> <span class="muted">— ${n ? `${n} XRPL token${n === 1 ? '' : 's'} tracked` : 'no public XRPL issuer tracked yet'}</span></li>`;
+      const chain = chainTokensByClass(c.slug);
+      const chainNote = chain.length
+        ? ` · ${chain.filter(t => t.ledger === 'solana').length} Solana · ${chain.filter(t => t.ledger === 'stellar').length} Stellar`
+        : c.slug === 'silver' ? ' · no Solana or Stellar silver token tracked' : '';
+      return `<li><a href="${classHref(c.slug)}"><b>${esc(cap(classLabel(c)))}</b></a> <span class="muted">— ${n ? `${n} XRPL token${n === 1 ? '' : 's'} tracked` : 'no public XRPL issuer tracked yet'}${chainNote}</span></li>`;
     }).join('');
     return `<h2>${esc(g.title)}</h2><ul>${items}</ul>`;
   }).join('');
@@ -1319,7 +1325,7 @@ function commoditiesIndex() {
         hasPart: CLASS_PAGES.map(c => ({ '@type': 'WebPage', name: c.h1, url: SITE_URL + classHref(c.slug) })), publisher: orgRef() }],
     body: `<div class="legal"><h1>Tokenized commodities on the XRP Ledger</h1>
 <p class="notice"><b>Short version:</b> A commodity token is an IOU on the XRP Ledger that says it stands for something physical — gold, a megawatt-hour of electricity, a collection of diamonds, a silo of grain. The ledger can show how many tokens exist, who holds them and what the issuer is allowed to do (freeze, claw back). It <b>cannot</b> show that the physical goods exist. ReserveWatch reads the ledger part, honestly, for every class. Not investment advice; not an audit or proof of reserves.</p>
-<p>Today ReserveWatch runs live checks on <b>${TOKENS.length}</b> XRPL tokens across <b>${live.length}</b> classes (${esc(trackedClassList())}). Every other class below has an explainer page that says plainly when no public XRPL issuer is tracked yet — we add a token only when its issuer account can be confirmed on XRPL mainnet.</p>
+<p>Today ReserveWatch runs live checks on <b>${TOKENS.length}</b> XRPL tokens across <b>${live.length}</b> classes (${esc(trackedClassList())}). Solana and Stellar gold commodity tokens are linked from <a href="/gold">gold</a>. No silver commodity token is tracked on those ledgers. Every other class below has an explainer page that says plainly when no public XRPL issuer is tracked yet.</p>
 ${groups}
 <h2>How every commodity token is checked</h2>
 <ul>
@@ -1328,6 +1334,21 @@ ${groups}
 <li><b>Soft labels, not accusations.</b> <span class="pill">Unverified listing</span> and <span class="pill">Issuer link unconfirmed</span> mean we could not confirm the issuer from the project itself — nothing more.</li>
 </ul>
 <p class="muted">Data: <a href="/api/commodities">/api/commodities</a> (classes and tracked token ids) · <a href="/api/tokens">/api/tokens</a> (live readings) · <a href="/snapshots">weekly snapshots</a> · <a href="/learn/clawback-freeze-trust-lines">clawback &amp; freeze explained</a></p></div>` });
+}
+
+function chainClassSection(c: ClassPage): string {
+  const tokens = chainTokensByClass(c.slug);
+  const label = cap(classLabel(c));
+  if (!tokens.length) {
+    if (c.slug !== 'silver') return '';
+    return `<h2>Silver commodity tokens on Solana and Stellar</h2><p>No Solana or Stellar silver commodity token is tracked. <a href="/ledger/solana">Solana</a> and <a href="/ledger/stellar">Stellar</a> list the gold commodity tokens ReserveWatch does read. A missing token is not a vault finding, and it is not a claim that no such token exists on those networks.</p>`;
+  }
+  const block = (ledger: 'solana' | 'stellar', ledgerName: string) => {
+    const rows = tokens.filter(token => token.ledger === ledger);
+    if (!rows.length) return '';
+    return `<h2>${esc(label)} commodity tokens on ${ledgerName}</h2><ul>${rows.map(token => `<li><a href="/token/${esc(token.id)}">${esc(token.name)}</a> <span class="muted">— ${esc(token.project)}${token.bridged ? ' · bridged' : ''}. Public ${ledgerName} supply and issuer controls. Not a vault check.</span></li>`).join('')}</ul><p><a href="/ledger/${ledger}">All ${ledgerName} commodity tokens</a></p>`;
+  };
+  return block('solana', 'Solana') + block('stellar', 'Stellar');
 }
 
 function commodityPage(c: ClassPage) {
@@ -1345,9 +1366,13 @@ function commodityPage(c: ClassPage) {
   const meta = commodityMeta(c.codes[0]);
   const path = classHref(c.slug);
   const names = defs.map(d => d.name).join(', ');
+  const chain = chainTokensByClass(c.slug);
+  const chainList = (ledger: 'solana' | 'stellar') => chain.filter(t => t.ledger === ledger).map(t => t.name).join(', ');
   const classFaqs = defs.length ? [
     { q: `Which ${meta.name} tokens does ReserveWatch track on the XRP Ledger?`, a: `As of the latest reading, the tracked ${meta.name} tokens are ${names}. Each has its own page with issuer controls, liquidity, and, where a price can be read, 7-day volume.` },
     { q: `Does an XRPL ${meta.name} token prove the commodity is in a vault?`, a: `No. On-ledger supply counts tokens. It does not show that a physical commodity exists. ReserveWatch does not audit vaults, and a measured reading is not a buy or sell rating.` },
+    ...(c.slug === 'gold' ? [{ q: 'Which gold commodity tokens does ReserveWatch track on Solana and Stellar?', a: `Solana: ${chainList('solana')}. Stellar: ${chainList('stellar')}. Each page shows public supply and issuer controls. 7-day DEX volume, AMM pools, and the legacy overall are not available on those ledgers. The reading does not show that gold is in a vault. ReserveWatch has not checked any vault.` }] : []),
+    ...(c.slug === 'silver' ? [{ q: 'Does ReserveWatch track a silver commodity token on Solana or Stellar?', a: 'No. The silver tokens on this page are XRP Ledger tokens. No Solana or Stellar silver commodity token is in the tracked list. That is not a finding that no silver token exists on those networks. It means one has not been confirmed for this list. It is not a vault check.' }] : []),
     ...(c.slug === 'diamonds' ? [{ q: 'How does diamond tokenization work?', a: 'A diamond token is a record on a ledger that says it stands for a certified stone, or a share of a collection of stones. The ledger can show how many tokens exist and who holds them. It does not show that a stone is in a vault, and ReserveWatch does not check that.' }] : []),
   ] : [];
   const qs = [
@@ -1368,14 +1393,15 @@ function commodityPage(c: ClassPage) {
         about: { '@type': 'Thing', name: meta.title } },
     ],
     body: `<div class="legal legal-wide"><h1>${esc(c.h1)}</h1><p class="muted">Last updated ${LEGAL_UPDATED} · <a href="/commodities">All commodities</a></p>
-${defs.length ? `<p class="answer">As of ${esc(readingDay())}, ReserveWatch tracks ${defs.length} ${esc(meta.name)} token${defs.length === 1 ? '' : 's'} on the XRP Ledger: ${esc(names)}. The figures below are public ledger readings, not a buy or sell list.</p>` : ''}
+${defs.length ? `<p class="answer">As of ${esc(readingDay())}, ReserveWatch tracks ${defs.length} ${esc(meta.name)} token${defs.length === 1 ? '' : 's'} on the XRP Ledger: ${esc(names)}.${chain.length ? ` Solana and Stellar add ${chain.length} ${esc(meta.name)} commodity token${chain.length === 1 ? '' : 's'}.` : c.slug === 'silver' ? ' No Solana or Stellar silver commodity token is tracked.' : ''} The figures below are public ledger readings, not a buy or sell list.</p>` : ''}
 ${c.slug === 'diamonds' ? `<h2>How does diamond tokenization work?</h2><p>A diamond token is a record on a ledger that says it stands for a certified stone, or a share of a collection of stones. The ledger can show how many tokens exist and who holds them. It does not show that a stone is in a vault, and ReserveWatch does not check that.</p>` : ''}
 <p class="notice"><b>Automated ledger readings, not advice.</b> ReserveWatch is not an audit, not proof of reserves and not investment advice. It does not tell anyone to buy, sell or hold a token.</p>
 <h2>What is a tokenized ${esc(c.noun ?? classLabel(c))} token?</h2><p>${c.what}</p>
 <h2>How price is compared</h2><p>${c.pricing}</p>
 <h2>${esc(cap(classLabel(c)))} on the XRP Ledger today</h2>${c.xrplStatus}
 ${tracked}
-${c.elsewhere ? `<h2>Outside the XRP Ledger</h2><p>${esc(c.elsewhere)} ReserveWatch covers XRPL only; these are listed for context, not tracked or endorsed.</p>` : ''}
+${chainClassSection(c)}
+${c.elsewhere ? `<h2>Outside the XRP Ledger</h2><p>${esc(c.elsewhere)} These notes are context. They are not an endorsement and not a vault check.</p>` : ''}
 <h2>Questions to ask before relying on a ${esc(c.noun ?? classLabel(c))} token</h2><ul>${qs.map(q => `<li>${q}</li>`).join('')}</ul>
 ${classFaqs.length ? `<h2>Short answers</h2>${classFaqs.map(f => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('')}` : ''}
 <p class="muted">How labels are set: <a href="/methodology">methodology</a> · Data: <a href="/api/commodities/${c.slug}">/api/commodities/${c.slug}</a> and <a href="/api/tokens">/api/tokens</a> · <a href="/state">State of XRPL commodity tokens</a> · <a href="/learn/clawback-freeze-trust-lines">Clawback &amp; freeze explained</a>${related ? ` · Related: ${related}` : ''}</p>
@@ -1448,7 +1474,7 @@ ${rows}
 }
 
 // ---------- FAQ (/faq) ----------
-const FAQ_UPDATED = 'November 18, 2026';
+const FAQ_UPDATED = 'November 24, 2026';
 /** Plain-text answers only. Links live in `more` so FAQPage JSON-LD stays free of HTML. */
 const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
   {
@@ -1491,6 +1517,21 @@ const FAQ_BLOCKS = (): { q: string; a: string; more: string }[] => [
     a: `The dataset at ${SITE_URL}/api/tokens is free JSON and free to cite. Attribute "${SITE_NAME}" and link that URL, or the page a reading came from. Per-token JSON is ${SITE_URL}/api/tokens/{id}, using the id from that token's page address. Cache responses. Acceptable use is described on the terms page. Do not describe the labels as an audit, proof of reserves, a credit rating, or investment advice. Readings can be delayed, incomplete, or wrong. Confirm with the issuer and an independent explorer.`,
     more: '<a href="/api/tokens">/api/tokens</a> · <a href="/terms">Terms of use</a> · <a href="/disclaimer">Disclaimer</a>',
   },
+  {
+    q: 'Is PAXG on Solana backed?',
+    a: 'ReserveWatch does not check that, and the Solana ledger cannot show it. The PAX Gold (PAXG) page reads the public Solana mint: reported supply, and mint or freeze authority when the endpoint returns them. That is a count of tokens and an issuer control. It does not show that gold is in a vault, that a reserve was audited, or that a holder can redeem. ReserveWatch has not checked any vault. This is not a buy or sell rating.',
+    more: '<a href="/token/solana-paxg">PAXG on Solana</a> · <a href="/ledger/solana">Solana commodity tokens</a> · <a href="/gold">Gold</a>',
+  },
+  {
+    q: 'Which commodity tokens does ReserveWatch read on Solana and Stellar?',
+    a: 'Solana gold: PAX Gold (PAXG), Tether Gold (XAUT0, labeled bridged), Matrixdock Gold (XAUm), DGLD, and VNX Gold (VNXAU). Stellar gold: Matrixdock Gold (XAUm) and VNX Gold (VNXAU). No silver commodity token is tracked on Solana or Stellar. Holder counts, when the endpoint does not return them, plus AMM pools, order books, xrp-ledger.toml, 7-day DEX volume, and the legacy overall are not available on those ledgers. None of these readings is a vault check.',
+    more: '<a href="/ledger/solana">Solana</a> · <a href="/ledger/stellar">Stellar</a> · <a href="/gold">Gold</a> · <a href="/silver">Silver</a>',
+  },
+  {
+    q: 'How should I cite a Solana or Stellar reading?',
+    a: `Attribute "${SITE_NAME}", the date on the page, and the page URL. JSON for one ledger is ${SITE_URL}/api/tokens?ledger=solana or ${SITE_URL}/api/tokens?ledger=stellar. All three ledgers: ${SITE_URL}/api/tokens?ledger=all. Per-token JSON is ${SITE_URL}/api/tokens/{id}. Cache responses. Do not describe a reading as an audit, proof of reserves, a credit rating, or investment advice.`,
+    more: '<a href="/api/tokens?ledger=solana">Solana JSON</a> · <a href="/api/tokens?ledger=stellar">Stellar JSON</a> · <a href="/llms.txt">llms.txt</a>',
+  },
 ];
 
 function faqPage() {
@@ -1523,6 +1564,9 @@ const commodityJson = (c: ClassPage) => ({
       url: SITE_URL + '/token/' + t.id,
     };
   }),
+  otherLedgers: chainTokensByClass(c.slug).map(t => ({
+    id: t.id, name: t.name, ledger: t.ledger, url: SITE_URL + '/token/' + t.id,
+  })),
 });
 
 /** Live JSON keeps status and checks exactly as measured. presentation is additive. */
@@ -1532,19 +1576,57 @@ function publicToken(t: TokenReport) {
 function publicChain(row: ChainReading) {
   return { ...row, presentation: presentFromChain(row).presentation };
 }
+function ledgerFaqs(which: Exclude<LedgerTab, 'xrpl'>): { q: string; a: string }[] {
+  if (which === 'solana') return [
+    { q: 'What does a Solana commodity-token reading show?', a: 'It shows public Solana supply for each listed gold commodity token, and mint or freeze authority when the endpoint returns them. Holder count, AMM pools, order books, xrp-ledger.toml, 7-day DEX volume, and the legacy OK, WARN, and CRITICAL overall are not available on this ledger. A missing field is not a failed check and not a zero.' },
+    { q: 'Does a Solana commodity-token reading prove gold is in a vault?', a: 'No. The ledger counts tokens and can show issuer controls. It does not show that gold exists, is insured, or can be redeemed. ReserveWatch has not checked any vault, reserve, or audit. The reading is not a buy or sell rating.' },
+  ];
+  if (which === 'stellar') return [
+    { q: 'What does a Stellar commodity-token reading show?', a: 'It shows public Stellar supply for each listed gold commodity token. A classic asset can also show issuer flags and trustlines. A contract token can show published controls, such as a blocklist or forced transfer. Those controls are features, not an event. Trustlines are accounts, not holders of metal. 7-day DEX volume, AMM pools, and the legacy overall are not available on this ledger.' },
+    { q: 'Does a Stellar commodity-token reading prove gold is in a vault?', a: 'No. On-ledger supply counts tokens. It does not show that gold is in a vault. A token with 0 issued on Stellar stays listed and is left out of the ounce total. ReserveWatch has not checked any vault, reserve, or audit.' },
+  ];
+  return [
+    { q: 'Which commodity tokens are on this page?', a: 'The board lists tracked commodity tokens on XRPL, Solana, and Stellar. Solana and Stellar entries are gold. Other classes stay on their commodity pages until a public issuer is confirmed. This is not every token on those networks.' },
+    { q: 'Is the 7-day volume a total for all three ledgers?', a: 'No. The volume section is the XRP Ledger reading. Solana and Stellar 7-day volume is not available on this ledger. A missing figure is not shown as zero. The figure is not a buy or sell rating and not proof of reserves.' },
+  ];
+}
+function ledgerDataset(which: Exclude<LedgerTab, 'xrpl'>, copy: { h1: string; description: string }, path: string) {
+  const technique = which === 'solana'
+    ? 'Public Solana RPC reads of mint supply and mint or freeze authority, plus a public gold spot price when a quote exists. Not a vault inspection.'
+    : which === 'stellar'
+      ? 'Public Stellar Horizon and Soroban reads of supply and issuer controls, plus a public gold spot price when a quote exists. Not a vault inspection.'
+      : 'Public XRPL, Solana, and Stellar readings for tracked commodity tokens. Solana and Stellar 7-day volume is not part of this dataset. Not a vault inspection.';
+  const keywords = which === 'all'
+    ? ['commodity tokens', 'XRPL', 'Solana', 'Stellar', 'tokenized gold']
+    : ['commodity tokens', 'tokenized gold', which === 'solana' ? 'Solana' : 'Stellar'];
+  const when = chainClock(which).when;
+  return {
+    '@context': 'https://schema.org', '@type': 'Dataset',
+    name: copy.h1, description: copy.description, url: SITE_URL + path,
+    license: SITE_URL + '/license', creator: orgRef(), publisher: orgRef(),
+    isAccessibleForFree: true, inLanguage: 'en', keywords,
+    measurementTechnique: technique,
+    ...(when ? { dateModified: when } : {}),
+    distribution: [{ '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${SITE_URL}/api/tokens?ledger=${which}` }],
+  };
+}
 function ledgerPage(which: Exclude<LedgerTab, 'xrpl'>) {
   const copy = LEDGER_COPY[which];
   const path = `/ledger/${which}`;
+  const faqs = ledgerFaqs(which);
   return page({
     title: copy.title, description: copy.description, path,
     jsonLd: [
+      orgLd(CONTACT_EMAIL),
       breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: copy.h1, path }]),
-      { '@context': 'https://schema.org', '@type': 'Dataset', name: copy.h1, description: copy.description, url: SITE_URL + path, license: SITE_URL + '/license', creator: orgRef(), publisher: orgRef(), isAccessibleForFree: true, inLanguage: 'en' },
+      ledgerDataset(which, copy, path),
+      faqPageLd(faqs),
     ],
     body: `<div class="mast"><h1>${esc(copy.h1)}</h1>
 <p class="lede">${esc(copy.lede)}</p>
 ${ledgerSwitch(which, ledgerBoard(which))}
 <p class="answer">${esc(ledgerAnswer(which))}</p>
+<h2>Short answers</h2>${faqs.map(item => `<h3>${esc(item.q)}</h3><p>${esc(item.a)}</p>`).join('')}
 ${citeLine(path, chainClock(which).when || snap?.updatedAt)}
 ${chainAsOf(which)}
 ${legendRow()}
@@ -1588,13 +1670,23 @@ function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, l
   const spotLine = spotUsd != null
     ? `Gold spot ${usd(spotUsd, 2)}/troy oz${spotSource ? ` · <span title="${esc(spotSource)}">${esc(shortHost(spotSource))}</span>` : ''}`
     : 'Gold spot not read this run';
-  const description = `${token.displayCode} commodity token on ${chainName}: supply and issuer controls. Not a vault check.`;
+  const description = `${token.displayCode} gold commodity token on ${chainName}: supply and issuer controls. Not a vault check.`;
+  const faqs = [
+    { q: `Is ${token.displayCode} on ${chainName} backed?`, a: `${token.name} on ${chainName} is a public ledger reading. ReserveWatch can show reported supply and issuer controls. It cannot show that gold is in a vault, that a reserve was audited, or that a holder can redeem. ReserveWatch has not checked any vault. This is not a buy or sell rating.` },
+    { q: `What can the ${chainName} ledger not show for ${token.displayCode}?`, a: 'Holder counts when the endpoint does not return them, AMM pools, order books, xrp-ledger.toml, 7-day DEX volume, and the legacy OK, WARN, and CRITICAL overall are not available on this ledger. Those gaps are the ledger boundary. They are not a failed check and not proof that metal is missing.' },
+    ...(token.bridged ? [{ q: `Is ${token.displayCode} on ${chainName} a bridged commodity token?`, a: `${token.name} is labeled bridged. ReserveWatch reads the ${chainName} token the project publishes. It does not check the token on another network, and it does not check a vault.` }] : []),
+  ];
+  const siblings = CHAIN_TOKENS.filter(item => item.ledger === token.ledger && item.id !== token.id);
+  const twins = CHAIN_TOKENS.filter(item => item.displayCode === token.displayCode && item.id !== token.id);
+  const siblingLinks = siblings.map(item => `<a href="/token/${esc(item.id)}">${esc(item.displayCode)}</a>`).join(', ');
+  const twinLinks = twins.map(item => `<a href="/token/${esc(item.id)}">${esc(item.displayCode)} on ${item.ledger === 'solana' ? 'Solana' : 'Stellar'}</a>`).join(', ');
   return page({
-    title: `${token.displayCode} commodity token on ${chainName} · ReserveWatch`,
+    title: `${token.displayCode} gold commodity token on ${chainName} · ReserveWatch`,
     description,
     path: `/token/${token.id}`,
     jsonLd: [
-      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: chainName, path: `/ledger/${token.ledger}` }, { name: token.name, path: `/token/${token.id}` }]),
+      breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: chainName, path: `/ledger/${token.ledger}` }, { name: 'Gold', path: '/gold' }, { name: token.name, path: `/token/${token.id}` }]),
+      faqPageLd(faqs),
       tokenThingLd({
         id: token.id, name: token.name, description,
         properties: [
@@ -1604,9 +1696,10 @@ function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, l
         ],
       }),
     ],
-    body: `<p class="crumb"><a href="/ledger/${token.ledger}">${chainName}</a></p>
+    body: `<p class="crumb"><a href="/ledger/${token.ledger}">${chainName}</a> · <a href="/gold">Gold</a></p>
 <h1>${esc(token.name)}${token.bridged ? ' <span class="pill">bridged</span>' : ''}</h1>
 <p class="answer">${esc(answer)}</p>
+<h2>Short answers</h2>${faqs.map(item => `<h3>${esc(item.q)}</h3><p>${esc(item.a)}</p>`).join('')}
 <p class="asof">${esc(chainSupplyProse(token, row))} · ${row.holders == null ? 'holders not available' : `${fmt(row.holders, 0)} holders`} · <span class="legacy-mark">Not available on this ledger</span> · <a href="/methodology">how labels differ</a></p>
 <p class="asof">${when}${spotLine}</p>
 ${renderLeadShell({ presentation: view.presentation, facts: view.facts, meterVoice: 'quote' })}
@@ -1628,7 +1721,7 @@ ${kv('7-day volume', na)}
 <details class="fold"><summary>AMM pools, order book, and trust-line stats</summary><div class="fold-body"><p>Not available on this ledger. ReserveWatch does not publish an AMM table, an order book, a trust-line freeze count, or a legacy OK / WARN / CRITICAL overall for this token.</p></div></details>
 <details class="fold"><summary>Notes</summary><div class="fold-body"><ul>${token.notes.map(n => `<li>${esc(n)}</li>`).join('')}<li>Explorer: <a href="${esc(token.explorerUrl)}" target="_blank" rel="noopener">${esc(token.explorerUrl)}</a></li><li>Address source: <a href="${esc(token.sourceUrl)}" target="_blank" rel="noopener">${esc(token.sourceUrl)}</a></li><li>Issuer site: <a href="${esc(token.website)}" target="_blank" rel="noopener">${esc(token.website)}</a></li></ul></div></details>
 <details class="fold"><summary>Embed this reading</summary><div class="fold-body"><p>The image links back to this page. It is a measured line, not a rating.</p><img src="/badge/${esc(token.id)}.svg" alt="${esc(token.name)} on ReserveWatch" width="320" height="64"><pre><code>${esc(badgeEmbed({ pageUrl: SITE_URL + '/token/' + token.id, imageUrl: SITE_URL + '/badge/' + token.id + '.svg', name: token.name, symbol: token.displayCode }))}</code></pre></div></details>
-<p class="muted">JSON: <a href="/api/tokens/${esc(token.id)}">/api/tokens/${esc(token.id)}</a> · <a href="/ledger/${token.ledger}">${chainName} commodity tokens</a> · <a href="/methodology">How checks work</a> · <a href="/disclaimer">Not investment advice and not an audit.</a></p>
+<p class="muted">JSON: <a href="/api/tokens/${esc(token.id)}">/api/tokens/${esc(token.id)}</a> · <a href="/ledger/${token.ledger}">${chainName} commodity tokens</a> · <a href="/gold">Gold commodity tokens</a>${siblingLinks ? ` · Also on ${chainName}: ${siblingLinks}` : ''}${twinLinks ? ` · Other ledger: ${twinLinks}` : ''} · <a href="/methodology">How checks work</a> · <a href="/disclaimer">Not investment advice and not an audit.</a></p>
 ${historySection(token.id, DATA_DIR)}
 ${citeLine('/token/' + token.id, row.updatedAt || undefined)}`,
   });
@@ -1642,12 +1735,15 @@ function newsLedgerPage(ledger: NewsLedger, pageNo: number): string | null {
   const label = ledger === 'xrpl' ? 'XRPL' : ledger === 'other' ? 'Other-ledger' : ledger.charAt(0).toUpperCase() + ledger.slice(1);
   const title = `${label} commodity news · ReserveWatch`;
   const path = pageNo > 1 ? `/news/ledger/${ledger}?page=${pageNo}` : `/news/ledger/${ledger}`;
+  const description = slice.length
+    ? describeHeadlines(`${label} commodity news: `, slice.map(item => item.headline))
+    : `${label} commodity news: no items for this ledger yet. Not a vault check.`;
   return page({
-    title, description: describeHeadlines(`${ledger} news: `, slice.map(item => item.headline)), path,
+    title, description, path,
     // Ledger filters repeat items already on /news and /news/YYYY-MM-DD.
-    noindex: true, canonical: true, rss: true,
+    noindex: true, canonical: true, rss: true, rssHref: `/news/feed.xml?ledger=${ledger}`,
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: ledger, path: `/news/ledger/${ledger}` }])],
-    body: `<div class="legal"><h1>${esc(title.replace(/ · ReserveWatch$/, ''))}</h1><p class="answer">${NEWS_LINE}</p>${newsLedgerTabs(ledger)}${slice.map(item => newsCard(item, 'h3')).join('') || '<p>No items for this ledger yet.</p>'}${NEWS_FOOT}</div>`,
+    body: `<div class="legal"><h1>${esc(title.replace(/ · ReserveWatch$/, ''))}</h1><p class="answer">${NEWS_LINE}</p>${newsLedgerTabs(ledger)}<p>RSS: <a href="/news/feed.xml?ledger=${esc(ledger)}">This ledger</a> · <a href="/news/feed.xml">All news</a></p>${slice.map(item => newsCard(item, 'h3')).join('') || '<p>No items for this ledger yet.</p>'}${NEWS_FOOT}</div>`,
   });
 }
 function publicSnap(s: Snapshot) {
@@ -1767,10 +1863,16 @@ app.get('/briefs/:slug', (q, r) => {
   r.send(briefPage(b));
 });
 app.get('/news', (_q, r) => { r.send(newsIndexPage()); });
-app.get('/news/feed.xml', (_q, r) => {
+app.get('/news/feed.xml', (q, r) => {
+  const ledger = typeof q.query.ledger === 'string' ? q.query.ledger : '';
+  const known = ledger === '' || (NEWS_LEDGERS as readonly string[]).includes(ledger);
+  const doc = loadNews();
+  const filtered = !ledger
+    ? doc
+    : { ...doc, items: known ? doc.items.filter(item => item.ledgers.includes(ledger as NewsLedger)) : [] };
   r.set('Content-Type', 'application/rss+xml; charset=utf-8');
   r.set('Cache-Control', 'public, max-age=3600');
-  r.send(newsRss(loadNews(), SITE_URL));
+  r.send(newsRss(filtered, SITE_URL, known && ledger ? ledger : undefined));
 });
 app.get('/news/archive', (_q, r) => { r.send(newsArchivePage(loadNews())); });
 app.get('/news/week/:week', (q, r) => {

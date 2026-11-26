@@ -6,6 +6,8 @@ export type ChainLedger = 'solana' | 'stellar';
 export interface ChainToken {
   id: string;
   ledger: ChainLedger;
+  /** Commodity hub slug. Every token in this file is gold. */
+  classSlug: 'gold';
   name: string;
   project: string;
   displayCode: string;
@@ -27,6 +29,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'solana-paxg',
     ledger: 'solana',
+    classSlug: 'gold',
     name: 'PAX Gold (PAXG)',
     project: 'Paxos',
     displayCode: 'PAXG',
@@ -45,6 +48,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'solana-xaut0',
     ledger: 'solana',
+    classSlug: 'gold',
     name: 'Tether Gold (XAUT0)',
     project: 'Tether',
     displayCode: 'XAUT0',
@@ -63,6 +67,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'solana-xaum',
     ledger: 'solana',
+    classSlug: 'gold',
     name: 'Matrixdock Gold (XAUm)',
     project: 'Matrixdock',
     displayCode: 'XAUm',
@@ -81,6 +86,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'solana-dgld',
     ledger: 'solana',
+    classSlug: 'gold',
     name: 'DGLD',
     project: 'Gold Token SA',
     displayCode: 'DGLD',
@@ -99,6 +105,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'solana-vnxau',
     ledger: 'solana',
+    classSlug: 'gold',
     name: 'VNX Gold (VNXAU)',
     project: 'VNX',
     displayCode: 'VNXAU',
@@ -117,6 +124,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'stellar-xaum',
     ledger: 'stellar',
+    classSlug: 'gold',
     name: 'Matrixdock Gold (XAUm)',
     project: 'Matrixdock',
     displayCode: 'XAUm',
@@ -136,6 +144,7 @@ export const CHAIN_TOKENS: ChainToken[] = [
   {
     id: 'stellar-vnxau',
     ledger: 'stellar',
+    classSlug: 'gold',
     name: 'VNX Gold (VNXAU)',
     project: 'VNX',
     displayCode: 'VNXAU',
@@ -155,3 +164,6 @@ export const CHAIN_TOKENS: ChainToken[] = [
 ];
 
 export const chainTokenById = (id: string) => CHAIN_TOKENS.find(t => t.id === id);
+
+/** Tokens whose commodity hub is `slug`. Silver and the other classes are empty until one is listed. */
+export const chainTokensByClass = (slug: string) => CHAIN_TOKENS.filter(token => token.classSlug === slug);
