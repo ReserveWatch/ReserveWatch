@@ -58,6 +58,32 @@ test('Dataset creator and publisher are a typed Organization', async () => {
   }
 });
 
+test('the default contact address is the ReserveWatch mailbox', async () => {
+  assert.equal(process.env.CONTACT_EMAIL, undefined);
+  const server = http.createServer(app);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+  const port = (server.address() as AddressInfo).port;
+  const get = async (urlPath: string) => (await fetch(`http://127.0.0.1:${port}${urlPath}`)).text();
+  try {
+    const home = await get('/');
+    const contact = await get('/contact');
+    const about = await get('/about');
+    const retired = 'peak' + 'academiccoaching';
+    for (const html of [home, contact, about]) {
+      assert.equal(html.toLowerCase().includes(retired), false);
+      assert.match(html, /josh@thereservewatch\.com/);
+    }
+    const blocks = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
+    const org = blocks.find(block => block && typeof block === 'object' && (block as { email?: string }).email);
+    assert.equal((org as { email?: string }).email, 'josh@thereservewatch.com');
+    assert.equal((org as { contactPoint?: { email?: string } }).contactPoint?.email, 'josh@thereservewatch.com');
+    assert.match(contact, /href="mailto:josh@thereservewatch\.com"/);
+    assert.match(about, /href="mailto:josh@thereservewatch\.com"/);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('Dataset JSON-LD names the public reuse page as its license', () => {
   assert.equal(datasetLd().license, 'https://thereservewatch.com/license');
   assert.equal(snapshotsDatasetLd().license, 'https://thereservewatch.com/license');

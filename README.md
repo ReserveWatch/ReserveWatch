@@ -46,7 +46,7 @@ Optional: `cp .env.example .env` and edit. **No API keys are required.**
 
 Token ids: `meld-gld`, `meld-slv`, `unlisted-gold-rmeld` ("Unverified listing" — shown for transparency, not on Meld's published list), `assetiko-xaua`, `assetiko-xaga` (silver), `assetiko-xpta` (platinum), `bpg-xau`.
 
-- `/disclaimer`, `/terms`, `/contact` — public-launch info pages (linked in every page footer). Contact address set by `CONTACT_EMAIL` (default peakacademiccoaching1@gmail.com).
+- `/disclaimer`, `/terms`, `/contact` — public-launch info pages (linked in every page footer). Contact address set by `CONTACT_EMAIL` (default josh@thereservewatch.com).
 
 ## What is measured (per token)
 
