@@ -69,7 +69,7 @@ Taken: tokenassay.com, assaywatch.com, assayboard.com, pegwatch.io.
   - Each issuer was checked both ways: it is listed in silver./platinum.assetiko.com xrp-ledger.toml, and its on-ledger Domain points back to that subdomain.
   - `rJanYB…` issues **only XAUa**.
   - Added the `XPT` metal; spot comes from gold-api `/price/XPT`.
-- **Legal pages:** `/disclaimer`, `/terms`, `/contact`, plus a footer on every page. `CONTACT_EMAIL` env sets the address (default peakacademiccoaching1@gmail.com). These are plain-language drafts and not legal advice; have counsel review them.
+- **Legal pages:** `/disclaimer`, `/terms`, `/contact`, plus a footer on every page. `CONTACT_EMAIL` env sets the address (default josh@thereservewatch.com). These are plain-language drafts and not legal advice; have counsel review them.
 
 ## Deploy checklist (Fly.io + Porkbun)
 1. `flyctl auth login` (browser) **or** `export FLY_API_TOKEN=...`, then run `./fly-deploy.sh reservewatch`. If the name is taken, use `thereservewatch`.

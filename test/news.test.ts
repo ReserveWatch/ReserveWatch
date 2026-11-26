@@ -56,25 +56,81 @@ test('neighbors point at the older and newer published days', () => {
   assert.deepEqual(dayNeighbors(days, '2026-11-18'), { prev: null, next: '2026-11-20' });
 });
 
-test('a tag with five items is in the sitemap and a thinner tag is not', () => {
+test('tag and ledger filters stay out of the sitemap even with five items', () => {
   const doc = seed();
-  for (let n = 0; n < 4; n++) {
-    const copy = structuredClone(doc.items[2]);
-    const date = `2026-11-1${n}`;
-    copy.id = `${date}-gold-extra-item`;
-    copy.date = date;
-    copy.publishedAt = `${date}T12:00:00.000Z`;
-    doc.items.push(copy);
-  }
+  const add = (index: number, slug: string, dates: string[]) => {
+    for (const date of dates) {
+      const copy = structuredClone(doc.items[index]);
+      copy.id = `${date}-${slug}-extra`;
+      copy.date = date;
+      copy.publishedAt = `${date}T12:00:00.000Z`;
+      doc.items.push(copy);
+    }
+  };
+  add(2, 'gold', ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19']);
+  add(0, 'regulation', ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']);
   const valid = validateNews(doc, today);
+  assert.ok(valid.items.filter(item => item.tags.includes('gold')).length >= 5);
+  assert.ok(valid.items.filter(item => item.tags.includes('regulation')).length >= 5);
+  assert.ok(valid.items.filter(item => item.ledgers.includes('other')).length >= 5);
   const xml = sitemapXml('2026-11-22', '2026-11-22', valid);
   assert.match(xml, /\/news</);
   assert.match(xml, /\/news\/2026-11-20/);
   assert.match(xml, /\/news\/week\/2026-W47/);
   assert.match(xml, /\/news\/archive/);
-  assert.match(xml, /\/news\/tag\/gold/);
-  assert.equal(xml.includes('/news/tag/xrpl'), false);
+  assert.equal(xml.includes('/news/tag/'), false);
+  assert.equal(xml.includes('/news/ledger/'), false);
   assert.match(llmsTxt(), /News: \/news \(daily summaries with sources\), RSS \/news\/feed\.xml, JSON \/api\/news/);
+});
+
+test('thick regulation and other filters are noindex and omitted from the sitemap', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rw-news-filters-'));
+  const previous = process.env.DATA_DIR;
+  process.env.DATA_DIR = dir;
+  resetNewsCacheForTests();
+  const doc = seed();
+  for (let n = 0; n < 4; n++) {
+    const copy = structuredClone(doc.items[0]);
+    const date = `2026-11-1${n}`;
+    copy.id = `${date}-regulation-extra`;
+    copy.date = date;
+    copy.publishedAt = `${date}T12:00:00.000Z`;
+    doc.items.push(copy);
+  }
+  const valid = validateNews(doc, today);
+  assert.ok(valid.items.filter(item => item.tags.includes('regulation')).length >= 5);
+  assert.ok(valid.items.filter(item => item.ledgers.includes('other')).length >= 5);
+  fs.writeFileSync(path.join(dir, 'news.json'), JSON.stringify(valid));
+  const server = http.createServer(app);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+  const port = (server.address() as AddressInfo).port;
+  const get = async (urlPath: string) => {
+    const res = await fetch(`http://127.0.0.1:${port}${urlPath}`);
+    return { status: res.status, html: await res.text() };
+  };
+  try {
+    const regulation = await get('/news/tag/regulation');
+    const other = await get('/news/ledger/other');
+    const sitemap = await get('/sitemap.xml');
+    assert.equal(regulation.status, 200);
+    assert.equal(other.status, 200);
+    assert.match(regulation.html, /<meta name="robots" content="noindex,follow">/);
+    assert.match(other.html, /<meta name="robots" content="noindex,follow">/);
+    assert.equal(regulation.html.includes('index,follow,max-image-preview:large'), false);
+    assert.equal(other.html.includes('index,follow,max-image-preview:large'), false);
+    assert.match(sitemap.html, /\/news</);
+    assert.match(sitemap.html, /\/news\/2026-11-20/);
+    assert.equal(sitemap.html.includes('/news/tag/regulation'), false);
+    assert.equal(sitemap.html.includes('/news/ledger/other'), false);
+    assert.equal(sitemap.html.includes('/news/tag/'), false);
+    assert.equal(sitemap.html.includes('/news/ledger/'), false);
+  } finally {
+    if (previous == null) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
+    resetNewsCacheForTests();
+    fs.rmSync(dir, { recursive: true, force: true });
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });
 
 test('an invalid news.json keeps the last good copy', () => {
@@ -173,9 +229,25 @@ test('news pages, the feed, the archive, the homepage, and IndexNow', async () =
 
     const tag = await get('/news/tag/gold');
     assert.match(tag.html, /<title>Tokenized gold news · ReserveWatch<\/title>/);
-    assert.match(tag.html, /noindex,follow/);
+    assert.match(tag.html, /<meta name="robots" content="noindex,follow">/);
     assert.match(tag.html, /rel="canonical" href="https:\/\/thereservewatch\.com\/news\/tag\/gold"/);
     jsonLd(tag.html);
+    const regulation = await get('/news/tag/regulation');
+    assert.equal(regulation.status, 200);
+    assert.match(regulation.html, /<meta name="robots" content="noindex,follow">/);
+    const other = await get('/news/ledger/other');
+    assert.equal(other.status, 200);
+    assert.match(other.html, /<meta name="robots" content="noindex,follow">/);
+    for (const filterPath of ['/news/ledger/xrpl', '/news/ledger/solana', '/news/ledger/stellar']) {
+      const filter = await get(filterPath);
+      assert.equal(filter.status, 200, filterPath);
+      assert.match(filter.html, /<meta name="robots" content="noindex,follow">/);
+    }
+    const sitemap = await get('/sitemap.xml');
+    assert.equal(sitemap.status, 200);
+    assert.match(sitemap.html, /\/news</);
+    assert.equal(sitemap.html.includes('/news/tag/'), false);
+    assert.equal(sitemap.html.includes('/news/ledger/'), false);
     const xrpl = await get('/news/tag/xrpl');
     assert.match(xrpl.html, /XRPL news for tokenized commodities · ReserveWatch/);
     assert.equal((await get('/news/tag/gold?page=2')).status, 404);

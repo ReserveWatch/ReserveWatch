@@ -2,7 +2,7 @@
 // JSON-LD, robots.txt and sitemap.xml. No dependencies; everything is server-rendered strings.
 import { TOKENS } from './config/tokens.js';
 import { CHAIN_TOKENS } from './ledgers/registry.js';
-import { loadNews, NEWS_LEDGERS, NEWS_TAGS, newsByLedger, newsByTag, newsDays, type NewsFile } from './content/news.js';
+import { loadNews, newsDays, type NewsFile } from './content/news.js';
 import { SNAPSHOTS } from './content/snapshots.js';
 import { CLASS_PAGES } from './content/commodities.js';
 import { LEARN_GUIDES } from './content/learn.js';
@@ -34,7 +34,7 @@ export interface SeoMeta {
   path: string;
   ogType?: 'website' | 'article';
   noindex?: boolean;
-  /** Emit a canonical link even when the page is noindex (tag pages under five items). */
+  /** Emit a canonical link even when the page is noindex (news tag and ledger filters). */
   canonical?: boolean;
   /** News pages link the RSS feed. */
   rss?: boolean;
@@ -242,8 +242,7 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
     { loc: abs('/news/archive'), lastmod: newest, changefreq: 'weekly', priority: '0.5' },
     ...days.map(d => ({ loc: abs(`/news/${d.date}`), lastmod: d.date, changefreq: 'weekly', priority: '0.5' })),
     ...[...news.weeks].sort((a, b) => a.date < b.date ? 1 : -1).map(w => ({ loc: abs(`/news/week/${w.week}`), lastmod: w.date, changefreq: 'weekly', priority: '0.6' })),
-    ...NEWS_TAGS.filter(tag => newsByTag(tag, news).length >= 5).map(tag => ({ loc: abs(`/news/tag/${tag}`), lastmod: newsByTag(tag, news)[0]?.date ?? newest, changefreq: 'weekly', priority: '0.4' })),
-    ...NEWS_LEDGERS.filter(name => newsByLedger(name, news).length >= 5).map(name => ({ loc: abs(`/news/ledger/${name}`), lastmod: newsByLedger(name, news)[0]?.date ?? newest, changefreq: 'weekly', priority: '0.4' })),
+    // /news/tag/* and /news/ledger/* are noindex filters. They are not listed here.
     { loc: abs('/briefs'), lastmod: BRIEFS[0]?.date ?? legalDate, changefreq: 'weekly', priority: '0.6' },
     ...BRIEFS.map(b => ({ loc: abs(`/briefs/${b.slug}`), lastmod: b.date, changefreq: 'yearly', priority: '0.5' })),
     { loc: abs('/learn'), lastmod: [legalDate, ...LEARN_GUIDES.map(g => g.dateModified)].sort().at(-1)!, changefreq: 'monthly', priority: '0.5' },
