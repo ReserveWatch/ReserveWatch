@@ -28,7 +28,7 @@ const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
 const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
 // Static brand assets (logo, favicons). Resolved relative to this file so it works from src/ (tsx) and dist/ (node).
-const CONTACT_EMAIL = process.env.CONTACT_EMAIL || 'peakacademiccoaching1@gmail.com';
+const CONTACT_EMAIL = process.env.CONTACT_EMAIL || 'josh@thereservewatch.com';
 const SITE_NAME = 'ReserveWatch';
 const LEGAL_UPDATED = 'November 22, 2026';
 const LEGAL_UPDATED_ISO = '2026-11-22';
@@ -676,7 +676,8 @@ function newsTagPage(doc: NewsFile, tag: string, pageNo: number): string | null 
   const pager = `${pageNo > 1 ? `<a href="${pageNo === 2 ? `/news/tag/${tag}` : `/news/tag/${tag}?page=${pageNo - 1}`}">Previous page</a>` : ''}${pageNo > 1 && pageNo < pages ? ' · ' : ''}${pageNo < pages ? `<a href="/news/tag/${tag}?page=${pageNo + 1}">Next page</a>` : ''}`;
   return page({
     title, description: describeHeadlines(`${h1}: `, slice.map(item => item.headline)), path: urlPath,
-    noindex: all.length < 5, canonical: true, rss: true,
+    // Tag filters repeat items already on /news and /news/YYYY-MM-DD.
+    noindex: true, canonical: true, rss: true,
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: h1, path: `/news/tag/${tag}` }]), newsListLd(slice.map(item => SITE_URL + newsItemPath(item)))],
     body: `<div class="legal"><h1>${esc(h1)}</h1><p class="answer">${NEWS_LINE}</p>${slice.map(item => newsCard(item, 'h3')).join('') || '<p>No items with this tag yet.</p>'}${pager ? `<p>${pager}</p>` : ''}${NEWS_FOOT}</div>`,
   });
@@ -1739,7 +1740,8 @@ function newsLedgerPage(ledger: NewsLedger, pageNo: number): string | null {
     : `${label} commodity news: no items for this ledger yet. Not a vault check.`;
   return page({
     title, description, path,
-    noindex: all.length < 5, canonical: true, rss: true, rssHref: `/news/feed.xml?ledger=${ledger}`,
+    // Ledger filters repeat items already on /news and /news/YYYY-MM-DD.
+    noindex: true, canonical: true, rss: true, rssHref: `/news/feed.xml?ledger=${ledger}`,
     jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'News', path: '/news' }, { name: ledger, path: `/news/ledger/${ledger}` }])],
     body: `<div class="legal"><h1>${esc(title.replace(/ · ReserveWatch$/, ''))}</h1><p class="answer">${NEWS_LINE}</p>${newsLedgerTabs(ledger)}<p>RSS: <a href="/news/feed.xml?ledger=${esc(ledger)}">This ledger</a> · <a href="/news/feed.xml">All news</a></p>${slice.map(item => newsCard(item, 'h3')).join('') || '<p>No items for this ledger yet.</p>'}${NEWS_FOOT}</div>`,
   });
