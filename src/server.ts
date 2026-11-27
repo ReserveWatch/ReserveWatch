@@ -1841,12 +1841,17 @@ app.disable('x-powered-by');
 // (health checks and the JSON API stay reachable on any host).
 const CANONICAL_HOST = new URL(SITE_URL).host;
 app.use((q, r, next) => {
+  // Keep the JSON and CSV API out of Google's index. Do not Disallow /api/ in robots.txt:
+  // AI crawlers and llms.txt still need to fetch the data. noindex only asks search engines not to list it.
+  // /mcp is the same kind of machine endpoint. A crawler GET is 405; that error must carry the same tag
+  // so it is not recorded as an indexable page. The tag is set before any method handler, including
+  // POST, HEAD, OPTIONS, and other method-not-allowed responses.
+  if (q.path === '/api' || q.path.startsWith('/api/') || q.path === '/healthz' || q.path === '/mcp' || q.path.startsWith('/mcp/')) {
+    r.set('X-Robots-Tag', 'noindex');
+  }
   const host = q.hostname;
   if ((q.method === 'GET' || q.method === 'HEAD') && (host === 'reservewatch.fly.dev' || host === 'www.' + CANONICAL_HOST)
     && q.path !== '/healthz' && !q.path.startsWith('/api/')) return void r.redirect(301, SITE_URL + q.originalUrl);
-  // Keep the JSON and CSV API out of Google's index. Do not Disallow /api/ in robots.txt:
-  // AI crawlers and llms.txt still need to fetch the data. noindex only asks search engines not to list it.
-  if (q.path === '/api' || q.path.startsWith('/api/') || q.path === '/healthz') r.set('X-Robots-Tag', 'noindex');
   next();
 });
 app.get('/robots.txt', (_q, r) => { r.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsTxt()); });
