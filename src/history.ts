@@ -20,6 +20,8 @@ export interface HistoryReading {
   pegPct: number | null;
   liquidityUsd: number | null;
   pegGrade: PegGrade;
+  /** Largest non-AMM holder share, when the poll recorded it. */
+  topHolderPct?: number | null;
   checks: { key: string; result: string }[];
 }
 
@@ -34,6 +36,7 @@ export interface DailyPoint {
   pegPct: number | null;
   liquidityUsd: number | null;
   pegGrade: PegGrade;
+  topHolderPct?: number | null;
 }
 
 export interface ChangeEvent {
@@ -85,6 +88,7 @@ function toPoint(row: HistoryReading): DailyPoint {
   return {
     day: dayOf(row.at), at: row.at, supply: row.supply, supplyOz: row.supplyOz, holders: row.holders, trustlines: row.trustlines,
     flags: row.flags, pegPct: row.pegPct, liquidityUsd: row.liquidityUsd, pegGrade: row.pegGrade,
+    topHolderPct: row.topHolderPct ?? null,
   };
 }
 
@@ -351,11 +355,12 @@ export function readingFromXrpl(t: {
   id: string; updatedAt: string; gramsPerToken: number;
   flags: Record<string, boolean | undefined>;
   supply: { circulating: number | null };
-  holders: { nonZero: number; trustlines: number };
+  holders: { nonZero: number; trustlines: number; topHolders?: { pct: number; label?: string }[] };
   peg: { deviationPct: number | null; reliable: boolean; liquidityUsd: number | null };
   checks: { key: string; severity: string }[];
 }): HistoryReading {
   const supply = t.supply.circulating;
+  const top = t.holders.topHolders?.find(holder => holder.label !== 'AMM pool');
   return {
     at: t.updatedAt, ledger: 'xrpl', tokenId: t.id,
     supply, supplyOz: supply != null && t.gramsPerToken > 0 ? troyOz(supply, t.gramsPerToken) : null,
@@ -368,6 +373,7 @@ export function readingFromXrpl(t: {
     pegPct: t.peg.reliable ? t.peg.deviationPct : null,
     liquidityUsd: t.peg.liquidityUsd,
     pegGrade: pegFromGap(t.peg.reliable, t.peg.deviationPct),
+    topHolderPct: top ? top.pct : null,
     checks: t.checks.map(c => ({ key: c.key, result: c.severity })),
   };
 }

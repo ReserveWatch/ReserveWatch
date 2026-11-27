@@ -217,6 +217,11 @@ News: /news (daily summaries with sources), RSS /news/feed.xml, JSON /api/news
 - [About](${abs('/about')}): what ${SITE_NAME} watches and what it does not do.
 - [Independence](${abs('/independent')}): not a custodian, issuer, vault auditor, or investment advice.
 - [Dataset JSON API](${abs('/api/tokens')}): free JSON readings (application/json). Free to cite.
+- [Attestations](${abs('/attestations')}): issuer-published report dates and live proof-of-reserves feed status for tracked commodity tokens. ReserveWatch has not audited any vault.
+- Attestation JSON: ${abs('/api/attestations')}
+- XRPL TokenEscrow readiness JSON: ${abs('/api/escrow-readiness')} (allowTrustLineLocking for tracked XRPL commodity tokens, plus RLUSD as a reference settlement asset, not a commodity token).
+- OpenAPI: ${abs('/openapi.json')}
+- Public read-only MCP: ${abs('/mcp')} (no API key; each tool returns the reading, the canonical page URL, and the non-audit disclaimer).
 
 ## Citation
 
@@ -241,6 +246,7 @@ export function sitemapXml(liveDate: string, legalDate: string, news: NewsFile =
     { loc: abs('/commodities'), lastmod: liveDate, changefreq: 'daily', priority: '0.8' },
     { loc: abs('/state'), lastmod: liveDate, changefreq: 'daily', priority: '0.9' },
     ...CLASS_PAGES.map(c => ({ loc: abs(classPublicPath(c.slug)), lastmod: TOKENS.some(t => c.codes.includes(t.metal)) ? liveDate : legalDate, changefreq: 'weekly', priority: TOKENS.some(t => c.codes.includes(t.metal)) ? '0.8' : '0.5' })),
+    { loc: abs('/attestations'), lastmod: '2026-11-27', changefreq: 'weekly', priority: '0.6' },
     { loc: abs('/methodology'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.6' },
     { loc: abs('/about'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },
     { loc: abs('/independent'), lastmod: '2026-11-06', changefreq: 'monthly', priority: '0.5' },

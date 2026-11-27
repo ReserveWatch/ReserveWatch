@@ -1,5 +1,6 @@
 import { dropsToXrp } from 'xrpl';
 import type { IndustryActivity, TokenActivity } from './volume.js';
+import { lockingFromAccount } from './escrow.js';
 import { req, isTransient } from './xrplClient.js';
 import { getSpot, type SpotQuote } from './spot.js';
 import { TOKENS, RLUSD, USDV, QUOTE_ASSETS, type QuoteAsset, GRAMS_PER_TROY_OZ, commodityMeta, type TokenDef, type Commodity } from './config/tokens.js';
@@ -174,7 +175,11 @@ export async function checkToken(t: TokenDef, xrpUsd: number | null, spotCache: 
   const info = await req<any>({ command: 'account_info', account: t.issuer, ledger_index: 'validated' });
   const issuerExists = !!info.result;
   const ad = info.result?.account_data ?? {};
-  const flags: Record<string, boolean> = info.result?.account_flags ?? {};
+  const flags: Record<string, boolean> = { ...(info.result?.account_flags ?? {}) };
+  if (issuerExists) {
+    const locking = lockingFromAccount(flags, ad.Flags);
+    if (locking != null) flags.allowTrustLineLocking = locking;
+  }
   const transferFeePct = ad.TransferRate ? (ad.TransferRate / 1e9 - 1) * 100 : 0;
   if (!issuerExists) {
     errors.push(`account_info: ${info.error}`);
