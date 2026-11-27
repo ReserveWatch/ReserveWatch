@@ -23,6 +23,12 @@ import { readChainLedgers, SOLANA_ENDPOINT, HORIZON_ENDPOINT, SOROBAN_ENDPOINT, 
 import { placeholderChainReading, presentFromChain } from './ledgers/present.js';
 import { fmtNum, troyOz } from './ledgers/parse.js';
 import { eventsRss, historySection, readEvents, readingFromChain, readingFromXrpl, recordHistory, supplyThreshold, tokenHistory } from './history.js';
+import { ATTESTATION_CHECKED, ATTESTATION_DISCLAIMER, presentAttestation, presentAttestations, PUBLIC_RECORD_DISCLAIMER } from './content/attestations.js';
+import { attestationBlock, attestationsOverviewHtml, cardEvidenceHtml, chainExplorers, chainFlags, citeSummary, evidenceRowHtml, xrplExplorers, xrplFlags } from './evidence.js';
+import { commodityEscrowRows, escrowPayload, escrowTableHtml, readAllowTrustLineLocking, rlusdEscrowRow, RLUSD_ISSUER } from './escrow.js';
+import { handleMcpMessage, wantsEventStream, type McpContext } from './mcp.js';
+import { openApiDocument } from './openapi.js';
+import { sparkSection } from './sparklines.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const POLL_SEC = Number(process.env.POLL_INTERVAL_SEC || 300);
@@ -41,6 +47,7 @@ const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
 
 let snap: Snapshot | null = null;
 let chainReadings: ChainReading[] = [];
+let rlusdLock: { value: boolean | null; error?: string } | null = null;
 let lastError: string | null = null;
 let running = false;
 let lastManualRefresh = 0;
@@ -73,6 +80,8 @@ async function refresh() {
   try { chainReadings = await readChainLedgers(); freshChain = chainReadings; }
   catch (e) { console.error('[ledgers] read failed', e); }
   finally { running = false; }
+  try { rlusdLock = await readAllowTrustLineLocking(RLUSD_ISSUER); }
+  catch { rlusdLock = { value: null, error: 'RPC unavailable' }; }
   try {
     const readings = [...freshXrpl.map(readingFromXrpl), ...(freshChain ?? []).map(readingFromChain)];
     if (readings.length) recordHistory(readings, { dir: DATA_DIR });
@@ -262,6 +271,14 @@ footer nav a{font-weight:650;text-decoration:none}
 .news-signup p{margin:8px 0 0}
 .spark{display:block}
 .spark rect{fill:var(--rw-navy)}
+.spark polyline{fill:none;stroke:var(--rw-navy);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.sparks{display:flex;flex-wrap:wrap;gap:8px 28px;margin:8px 0 16px}
+.sparks figure{margin:0}
+.sparks figcaption{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--rw-gold-ink);font-weight:750}
+.flag-row{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin:8px 0 0;padding:0;list-style:none}
+ul.flag-row{align-items:flex-start}
+.flag-row li{font-size:.92rem}
+.cite-summary{margin:0 0 12px;max-width:48rem;font-size:1.05rem;line-height:1.45;color:var(--rw-navy)}
 @media(max-width:720px){
 header .wrap,main,footer .wrap{padding-left:16px;padding-right:16px}
 header .wrap{flex-direction:column;align-items:stretch;gap:12px;padding-top:12px;padding-bottom:12px}
@@ -285,9 +302,9 @@ ${o.refresh ? '<script>setTimeout(function(){location.reload()},60000)</script>'
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">${PLAUSIBLE_DOMAIN ? `<script defer data-domain="${esc(PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''}<style>${CSS}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
-<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch: On-chain reserve health for tokenized assets" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
+<header><div class="wrap"><a href="/" class="brand"><img src="/logo.png" alt="ReserveWatch: On-chain reserve health for tokenized assets" width="441" height="96"></a><nav aria-label="Primary"><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Snapshots</a><a href="/news">News</a><a href="/attestations">Attestations</a><a href="/faq">FAQ</a><a href="/about">About</a></nav></div></header>
 <main id="content">${o.body}</main>
-<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/news">News</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
+<footer><div class="wrap"><nav><a href="/about">About</a><a href="/independent">Independence</a><a href="/commodities">Commodities</a><a href="/methodology">Methodology</a><a href="/snapshots">Weekly snapshots</a><a href="/news">News</a><a href="/attestations">Attestations</a><a href="/state">State</a><a href="/briefs">Briefs</a><a href="/learn">Learn</a><a href="/faq">FAQ</a><a href="/alerts">Alerts</a><a href="/disclaimer">Disclaimer</a><a href="/license">Data license</a><a href="/terms">Terms of use</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a><a href="/api/tokens">API</a></nav>
 <p>Public XRPL, Solana and Stellar readings, plus a spot price for gold, silver, platinum, and palladium. Not investment advice and not proof of reserves. RLUSD and USDV are valued at a nominal $1. Measured is not a safety rating. <a href="/disclaimer">Disclaimer</a>.</p>
 <p>© ${new Date().getFullYear()} ${SITE_NAME}. <a href="/independent">Independent</a>; not affiliated with Ripple, the XRPL Foundation, or any token issuer listed. Endpoints: XRPL ${esc(endpointList()[0])}; Solana ${esc(SOLANA_ENDPOINT())}; Horizon ${esc(HORIZON_ENDPOINT())}; Soroban ${esc(SOROBAN_ENDPOINT())}.</p></div></footer></body></html>`;
 
@@ -414,6 +431,7 @@ function ledgerBoard(which: LedgerTab): string {
       search: `${token.name} ${token.displayCode} gold ${token.ledger} ${token.project}`,
       presentation: view.presentation,
       facts: view.facts,
+      evidenceHtml: cardEvidenceHtml(token.id),
       meterVoice: 'quote',
     });
   }).join('');
@@ -516,6 +534,27 @@ function ledgerAnswer(which: Exclude<LedgerTab, 'xrpl'>): string {
   const name = which === 'solana' ? 'Solana' : 'Stellar';
   return `As of ${when}, ReserveWatch listed ${rows.length} commodity tokens on ${name}. 7-day DEX volume is not available on this ledger. The legacy OK, WARN, and CRITICAL overall is not available on this ledger. This is not a buy or sell rating and not proof of reserves.`;
 }
+function escrowSection(): string {
+  const flags = (snap?.tokens ?? []).map(token => ({
+    id: token.id,
+    name: token.name,
+    issuer: token.issuer,
+    allowTrustLineLocking: typeof token.flags?.allowTrustLineLocking === 'boolean' ? token.flags.allowTrustLineLocking : null,
+  }));
+  const rlusd = rlusdEscrowRow(rlusdLock?.value ?? null, rlusdLock?.error || 'Not read this run');
+  return escrowTableHtml([...commodityEscrowRows(flags), rlusd]);
+}
+function xrplCite(t: TokenReport): [string, string] {
+  const day = (t.updatedAt || new Date().toISOString()).slice(0, 10);
+  const metal = commodityMeta(t.metal).name;
+  const supply = t.supply.circulating == null
+    ? 'circulating supply was not read this run'
+    : `${fmt(t.supply.circulating, 0)} ${t.displayCode} circulating`;
+  return [
+    `As of ${day}, ${t.name} is a ${metal} commodity token on the XRP Ledger with ${supply} in this public reading.`,
+    'ReserveWatch has not audited any vault, and the reading is not a buy or sell rating.',
+  ];
+}
 function listPage() {
   return page({
     title: 'On-chain reserve health · ReserveWatch',
@@ -527,7 +566,8 @@ ${ledgerSwitch('xrpl', ledgerBoard('xrpl'))}
 ${homeAnswer()}
 ${header()}
 ${legendRow()}
-${labelsFold('xrpl')}</div>
+${labelsFold('xrpl')}
+${escrowSection()}</div>
 ${classStrip('xrpl')}
 ${activitySection('xrpl')}
 ${latestNewsHtml()}
@@ -692,7 +732,7 @@ const tokenTitle = (t: TokenMeta) => `${t.displayCode} on XRPL · ReserveWatch`;
 const tokenDescription = (t: TokenMeta) => `${t.displayCode} (${METAL_NAME[t.metal] ?? t.metal}) on XRPL: supply, holders, issuer controls, and liquidity. Not a rating or proof of reserves.`;
 
 function tokenPage(t: TokenReport) {
-  const flagRows = ['globalFreeze', 'noFreeze', 'allowTrustLineClawback', 'requireAuthorization', 'disableMasterKey', 'defaultRipple', 'depositAuth']
+  const flagRows = ['globalFreeze', 'noFreeze', 'allowTrustLineClawback', 'requireAuthorization', 'allowTrustLineLocking', 'disableMasterKey', 'defaultRipple', 'depositAuth']
     .map(k => `<tr><td>${k}</td><td>${t.flags[k] === undefined ? '—' : t.flags[k] ? '<b>true</b>' : 'false'}</td></tr>`).join('');
   const poolRows = t.pools.map(p => p.exists
     ? `<tr><td>${esc(p.pair)}</td><td>${acct(p.account!)}</td><td>${fmt(p.tokenAmount, 4)} ${esc(t.displayCode)} / ${fmt(p.counterAmount, 4)} ${esc(p.counterAsset)}</td><td>${usd(p.tvlUsd)}</td><td>${usd(p.impliedUsdPerToken, 4)}</td><td>${fmt(p.tradingFeePct, 3)}%</td></tr>`
@@ -716,6 +756,8 @@ function tokenPage(t: TokenReport) {
     ],
     body: `<p class="crumb"><a href="${classHref(commodityMeta(t.metal).slug)}">${esc(commodityMeta(t.metal).title)}</a></p>
 <h1>${esc(t.name)}${labelPill(t)}</h1>
+${citeSummary(xrplCite(t))}
+${attestationBlock(t.id)}
 <p class="answer">As of ${esc(readingDay())}, ${esc(t.name)} has ${fmt(t.supply.circulating, 0)} ${esc(t.displayCode)} circulating across ${fmt(t.holders.nonZero, 0)} holders. ${esc(t.activity ? activityPlain(t.activity) : '7-day volume not measured')}. The legacy worst check is ${esc(t.status.toUpperCase())}, which is not a buy or sell rating.</p>
 <p class="asof">${fmt(t.supply.circulating, 0)} ${esc(t.displayCode)} circulating · ${fmt(t.holders.nonZero, 0)} holders · Legacy <span class="legacy-mark legacy-${t.status}">${t.status.toUpperCase()}</span> · <a href="/methodology">how labels differ</a></p>
 ${header()}
@@ -738,6 +780,8 @@ ${renderDetailLead(t)}
 <div class="kv"><b>Frozen lines</b>${fmt(t.holders.frozenLines, 0)} (${fmt(t.holders.frozenBalance, 4)} tokens)</div>
 <div class="kv"><b>Ledger</b>${esc(t.ledgerIndex ?? '—')}</div>
 </div>
+${evidenceRowHtml(t.id, xrplFlags(t.flags), xrplExplorers(t.issuer))}
+${sparkSection(t.id, DATA_DIR)}
 <details class="fold"><summary>Raw automated checks</summary><div class="fold-body">
 <p class="muted">These severities are the legacy model. They are not relabeled. One WARN still makes the legacy overall WARN, including a feature or a gap. The comparison above is a separate reading of the same facts. Historical snapshots keep the legacy labels they were published with.</p>
 <div class="table-wrap"><table>${checks}</table></div></div></details>
@@ -1571,10 +1615,43 @@ const commodityJson = (c: ClassPage) => ({
 
 /** Live JSON keeps status and checks exactly as measured. presentation is additive. */
 function publicToken(t: TokenReport) {
-  return { ...t, ledger: t.ledger ?? 'xrpl', presentation: viewOf(t) };
+  return { ...t, ledger: t.ledger ?? 'xrpl', presentation: viewOf(t), attestation: presentAttestation(t.id) };
 }
 function publicChain(row: ChainReading) {
-  return { ...row, presentation: presentFromChain(row).presentation };
+  return { ...row, presentation: presentFromChain(row).presentation, attestation: presentAttestation(row.id) };
+}
+function mcpContext(): McpContext {
+  return {
+    listTokens: () => ({
+      tokens: [
+        ...TOKENS.map(token => ({
+          id: token.id, name: token.name, ledger: 'xrpl', commodity: commodityMeta(token.metal).name,
+          url: `${SITE_URL}/token/${token.id}`,
+        })),
+        ...CHAIN_TOKENS.map(token => ({
+          id: token.id, name: token.name, ledger: token.ledger, commodity: 'gold',
+          url: `${SITE_URL}/token/${token.id}`,
+        })),
+      ],
+    }),
+    tokenReading: (id: string) => {
+      const chain = chainReadings.find(row => row.id === id);
+      if (chain) return publicChain(chain);
+      const token = snap?.tokens.find(row => row.id === id);
+      if (token) return publicToken(token);
+      const known = chainTokenById(id) ?? TOKENS.find(item => item.id === id);
+      return known ? { id, name: known.name, reading: 'not loaded' } : null;
+    },
+    escrow: async () => {
+      const flags = (snap?.tokens ?? []).map(token => ({
+        id: token.id, name: token.name, issuer: token.issuer,
+        allowTrustLineLocking: typeof token.flags?.allowTrustLineLocking === 'boolean' ? token.flags.allowTrustLineLocking : null,
+      }));
+      const live = rlusdLock ?? await readAllowTrustLineLocking(RLUSD_ISSUER);
+      rlusdLock = live;
+      return escrowPayload([...commodityEscrowRows(flags), rlusdEscrowRow(live.value, live.error)]);
+    },
+  };
 }
 function ledgerFaqs(which: Exclude<LedgerTab, 'xrpl'>): { q: string; a: string }[] {
   if (which === 'solana') return [
@@ -1698,6 +1775,11 @@ function chainTokenPage(token: NonNullable<ReturnType<typeof chainTokenById>>, l
     ],
     body: `<p class="crumb"><a href="/ledger/${token.ledger}">${chainName}</a> · <a href="/gold">Gold</a></p>
 <h1>${esc(token.name)}${token.bridged ? ' <span class="pill">bridged</span>' : ''}</h1>
+${citeSummary([
+      `${day ? `As of ${day}, ` : ''}${token.name} is a gold commodity token on ${chainName}. This page reads public ${chainName} supply and issuer controls.`,
+      'ReserveWatch has not audited any vault, and the reading is not a buy or sell rating.',
+    ])}
+${attestationBlock(token.id)}
 <p class="answer">${esc(answer)}</p>
 <h2>Short answers</h2>${faqs.map(item => `<h3>${esc(item.q)}</h3><p>${esc(item.a)}</p>`).join('')}
 <p class="asof">${esc(chainSupplyProse(token, row))} · ${row.holders == null ? 'holders not available' : `${fmt(row.holders, 0)} holders`} · <span class="legacy-mark">Not available on this ledger</span> · <a href="/methodology">how labels differ</a></p>
@@ -1718,6 +1800,8 @@ ${kv('Peg', esc(row.pegNote))}
 ${kv('Transfer fee', fee ? `${fee} bps` : 'No transfer fee in this reading')}
 ${kv('7-day volume', na)}
 </div>
+${evidenceRowHtml(token.id, chainFlags(row), chainExplorers(token))}
+${sparkSection(token.id, DATA_DIR)}
 <details class="fold"><summary>AMM pools, order book, and trust-line stats</summary><div class="fold-body"><p>Not available on this ledger. ReserveWatch does not publish an AMM table, an order book, a trust-line freeze count, or a legacy OK / WARN / CRITICAL overall for this token.</p></div></details>
 <details class="fold"><summary>Notes</summary><div class="fold-body"><ul>${token.notes.map(n => `<li>${esc(n)}</li>`).join('')}<li>Explorer: <a href="${esc(token.explorerUrl)}" target="_blank" rel="noopener">${esc(token.explorerUrl)}</a></li><li>Address source: <a href="${esc(token.sourceUrl)}" target="_blank" rel="noopener">${esc(token.sourceUrl)}</a></li><li>Issuer site: <a href="${esc(token.website)}" target="_blank" rel="noopener">${esc(token.website)}</a></li></ul></div></details>
 <details class="fold"><summary>Embed this reading</summary><div class="fold-body"><p>The image links back to this page. It is a measured line, not a rating.</p><img src="/badge/${esc(token.id)}.svg" alt="${esc(token.name)} on ReserveWatch" width="320" height="64"><pre><code>${esc(badgeEmbed({ pageUrl: SITE_URL + '/token/' + token.id, imageUrl: SITE_URL + '/badge/' + token.id + '.svg', name: token.name, symbol: token.displayCode }))}</code></pre></div></details>
@@ -1973,6 +2057,89 @@ app.get('/api/commodities/:slug', (q, r) => { const c = CLASS_PAGES.find(x => x.
 app.get('/learn', (_q, r) => { r.send(learnIndex()); });
 app.get('/learn/clawback-freeze-trust-lines', (_q, r) => { r.send(clawbackPillar()); });
 for (const g of LEARN_GUIDES) app.get(`/learn/${g.slug}`, (_q, r) => { r.send(learnGuidePage(g)); });
+app.get('/attestations', (_q, r) => {
+  const asOf = new Date().toISOString().slice(0, 10);
+  const views = presentAttestations(asOf);
+  r.send(page({
+    title: 'Commodity token attestation freshness · ReserveWatch',
+    description: 'Dated issuer attestation reports and live proof-of-reserves feeds for tracked commodity tokens. ReserveWatch has not audited any vault.',
+    path: '/attestations',
+    jsonLd: [breadcrumbLd([{ name: 'ReserveWatch', path: '/' }, { name: 'Attestations', path: '/attestations' }])],
+    body: `<div class="legal legal-wide"><h1>Attestation freshness</h1>
+<p class="cite-summary">ReserveWatch lists the issuer's published attestation date and whether that issuer publishes a live proof-of-reserves feed for each tracked commodity token. ${esc(ATTESTATION_DISCLAIMER)}</p>
+<p class="muted">Registry checked ${esc(ATTESTATION_CHECKED)}. Freshness is computed on ${esc(asOf)} from the report date and the issuer's stated cadence. A missing date stays "Not published / none found".</p>
+${attestationsOverviewHtml(views)}
+<p class="meter-cap">${esc(PUBLIC_RECORD_DISCLAIMER)}</p>
+${citeLine('/attestations', asOf)}</div>`,
+  }));
+});
+app.get('/openapi.json', (_q, r) => {
+  r.set('Cache-Control', 'public, max-age=3600');
+  r.json(openApiDocument());
+});
+app.get('/mcp', (_q, r) => {
+  r.set('Allow', 'POST');
+  r.status(405).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Method Not Allowed' } });
+});
+app.post('/mcp', (q, r, next) => {
+  express.json({ limit: '64kb' })(q, r, (err: unknown) => {
+    if (err) {
+      r.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+      return;
+    }
+    next();
+  });
+}, async (q, r) => {
+  const ctx = mcpContext();
+  const send = (status: number, body: unknown | null) => {
+    if (status === 202 || body == null) { r.status(202).end(); return; }
+    if (wantsEventStream(q.get('accept') || undefined)) {
+      r.status(status).set('Content-Type', 'text/event-stream; charset=utf-8');
+      r.send(`event: message\ndata: ${JSON.stringify(body)}\n\n`);
+      return;
+    }
+    r.status(status).json(body);
+  };
+  try {
+    const payload = q.body;
+    if (Array.isArray(payload)) {
+      const out = [];
+      for (const item of payload) {
+        const handled = await handleMcpMessage(item as { jsonrpc?: string; method?: string }, ctx);
+        if (handled.body) out.push(handled.body);
+      }
+      if (!out.length) { r.status(202).end(); return; }
+      send(200, out);
+      return;
+    }
+    const handled = await handleMcpMessage(payload, ctx);
+    send(handled.status, handled.body);
+  } catch {
+    r.status(500).json({ jsonrpc: '2.0', id: null, error: { code: -32603, message: 'Internal error' } });
+  }
+});
+app.get('/api/attestations', (_q, r) => {
+  const asOf = new Date().toISOString().slice(0, 10);
+  r.json({
+    asOf,
+    checkedDate: ATTESTATION_CHECKED,
+    disclaimer: ATTESTATION_DISCLAIMER,
+    canonicalUrl: `${SITE_URL}/attestations`,
+    entries: presentAttestations(asOf),
+  });
+});
+app.get('/api/escrow-readiness', async (_q, r) => {
+  const flags = (snap?.tokens ?? []).map(token => ({
+    id: token.id,
+    name: token.name,
+    issuer: token.issuer,
+    allowTrustLineLocking: typeof token.flags?.allowTrustLineLocking === 'boolean' ? token.flags.allowTrustLineLocking : null,
+  }));
+  const live = await readAllowTrustLineLocking(RLUSD_ISSUER);
+  if (live.value != null || !rlusdLock) rlusdLock = live;
+  const used = live.value != null ? live : rlusdLock;
+  r.json(escrowPayload([...commodityEscrowRows(flags), rlusdEscrowRow(used.value, used.error)]));
+});
 app.get('/api/tokens', (q, r) => {
   const which = String(q.query.ledger || 'xrpl');
   if (q.query.ledger != null && which !== 'xrpl' && which !== 'solana' && which !== 'stellar' && which !== 'all') {

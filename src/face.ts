@@ -6,6 +6,7 @@
 
 import type { TokenReport } from './monitor.js';
 import { commodityMeta } from './config/tokens.js';
+import { cardEvidenceHtml, lockingLine } from './evidence.js';
 import { activityPlain } from './volume.js';
 import {
   itemsOf, presentFromReport, DEFAULT_THRESHOLDS,
@@ -172,6 +173,10 @@ export interface CardShell {
   presentation: ReturnType<typeof presentFromReport>;
   facts: FaceFacts;
   volumeHtml?: string;
+  /** Compact attestation and proof-of-reserves chips. */
+  evidenceHtml?: string;
+  /** Factual XLS-85 line under the controls chips. */
+  controlsNote?: string;
   /** `pool` is the XRPL AMM caption. `quote` is a public price with no AMM table. */
   meterVoice?: 'pool' | 'quote';
 }
@@ -193,10 +198,11 @@ export function renderCardShell(card: CardShell): string {
   const identity = view.categories.identity.items;
   return `<article class="token-card${edge}" data-name="${esc(card.search)}">
 <header class="card-top"><div><h2><a href="${esc(card.tokenHref)}">${esc(card.name)}</a>${badge}${pill}</h2><p class="card-sub">${esc(card.project)} · <a href="${esc(card.subHref)}">${esc(card.subName)}</a></p></div><p class="supply"><b>${esc(card.supplyPrimary)}</b><span>${esc(card.supplyUnit)}</span></p></header>
+${card.evidenceHtml ?? ''}
 ${banner(items)}
 <div class="groups">
 <section class="group"><h3>Market</h3><p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${card.volumeHtml ?? ''}${meters(facts, voice)}</section>
-<section class="group"><h3>Controls</h3><div class="facts">${controls.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div>${concentrationMeter(controls, facts)}</section>
+<section class="group"><h3>Controls</h3><div class="facts">${controls.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div>${concentrationMeter(controls, facts)}${card.controlsNote ?? ''}</section>
 <section class="group"><h3>Identity</h3><div class="facts">${identity.map(i => chip(i, facts)).join('') || '<span class="muted">None read</span>'}</div></section>
 </div>
 <footer class="card-foot">${legacyMark(view)}${readings(items, facts, view.marketFigures)}</footer>
@@ -204,7 +210,7 @@ ${banner(items)}
 }
 
 /** Token page lead: banner, then the three groups. Explanations sit in details; the banner does not. */
-export function renderLeadShell(card: Pick<CardShell, 'presentation' | 'facts' | 'volumeHtml' | 'meterVoice'>): string {
+export function renderLeadShell(card: Pick<CardShell, 'presentation' | 'facts' | 'volumeHtml' | 'meterVoice' | 'controlsNote'>): string {
   const view = card.presentation;
   const facts = card.facts;
   const voice = card.meterVoice ?? 'pool';
@@ -212,7 +218,7 @@ export function renderLeadShell(card: Pick<CardShell, 'presentation' | 'facts' |
   const block = (title: string, inner: string, groupItems: PresentItem[]) => `<section class="panel"><h2>${title}</h2>${inner}<details class="fold"><summary>Explanation</summary><div class="fold-body">${groupItems.map(i => `<p><b>${esc(visibleLabel(i, facts))}.</b> ${esc(i.detail)}</p>`).join('') || '<p>Nothing classified.</p>'}</div></details></section>`;
   return `${banner(items)}<div class="panels">
 ${block('Market', `<p class="readout">${esc(marketHeadline(view.categories.market.items, facts))}</p>${card.volumeHtml ?? ''}${meters(facts, voice)}`, view.categories.market.items)}
-${block('Controls', `<div class="facts">${view.categories.controls.items.map(i => chip(i, facts)).join('')}</div>${concentrationMeter(view.categories.controls.items, facts)}`, view.categories.controls.items)}
+${block('Controls', `<div class="facts">${view.categories.controls.items.map(i => chip(i, facts)).join('')}</div>${concentrationMeter(view.categories.controls.items, facts)}${card.controlsNote ?? ''}`, view.categories.controls.items)}
 ${block('Identity', `<div class="facts">${view.categories.identity.items.map(i => chip(i, facts)).join('')}</div>`, view.categories.identity.items)}
 </div><p class="meter-cap">${esc(view.marketFigures)}</p>`;
 }
@@ -236,6 +242,8 @@ export function renderHomeCard(t: TokenReport, nav: CardNav, thresholds: Thresho
     presentation: view,
     facts,
     volumeHtml: volumeHtml(t),
+    evidenceHtml: cardEvidenceHtml(t.id),
+    controlsNote: lockingLine(t.flags?.allowTrustLineLocking),
     meterVoice: 'pool',
   });
 }
@@ -246,6 +254,7 @@ export function renderDetailLead(t: TokenReport, thresholds: Thresholds = DEFAUL
     presentation: presentFromReport(t, thresholds),
     facts: faceFacts(t, thresholds),
     volumeHtml: volumeHtml(t),
+    controlsNote: lockingLine(t.flags?.allowTrustLineLocking),
     meterVoice: 'pool',
   });
 }
