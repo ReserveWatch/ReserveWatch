@@ -164,7 +164,7 @@ test('pages, sitemap, llms, OpenAPI, and MCP stay issuer-neutral', async () => {
   const port = (server.address() as AddressInfo).port;
   const get = async (path: string, init?: RequestInit) => {
     const res = await fetch(`http://127.0.0.1:${port}${path}`, init);
-    return { status: res.status, type: res.headers.get('content-type') ?? '', allow: res.headers.get('allow') ?? '', html: await res.text() };
+    return { status: res.status, type: res.headers.get('content-type') ?? '', allow: res.headers.get('allow') ?? '', robots: res.headers.get('x-robots-tag') ?? '', html: await res.text() };
   };
   try {
     const home = await get('/');
@@ -198,6 +198,7 @@ test('pages, sitemap, llms, OpenAPI, and MCP stay issuer-neutral', async () => {
 
     const spec = await get('/openapi.json');
     assert.equal(spec.status, 200);
+    assert.equal(spec.robots, '');
     const parsed = JSON.parse(spec.html) as { openapi: string; paths: Record<string, unknown> };
     assert.equal(parsed.openapi, '3.1.0');
     assert.ok(parsed.paths['/api/escrow-readiness']);
@@ -205,6 +206,7 @@ test('pages, sitemap, llms, OpenAPI, and MCP stay issuer-neutral', async () => {
     const denied = await get('/mcp');
     assert.equal(denied.status, 405);
     assert.match(denied.allow, /POST/);
+    assert.equal(denied.robots, 'noindex');
 
     const rpc = await get('/mcp', {
       method: 'POST',
@@ -212,6 +214,7 @@ test('pages, sitemap, llms, OpenAPI, and MCP stay issuer-neutral', async () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'list_commodity_tokens', arguments: {} } }),
     });
     assert.equal(rpc.status, 200);
+    assert.equal(rpc.robots, 'noindex');
     const body = JSON.parse(rpc.html) as { result: { structuredContent: { canonicalUrl: string; disclaimer: string; data: { tokens: { id: string }[] } } } };
     assert.equal(body.result.structuredContent.canonicalUrl, 'https://thereservewatch.com/');
     assert.match(body.result.structuredContent.disclaimer, /not investment/);
